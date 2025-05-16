@@ -144,12 +144,7 @@ class Article(db.Model):
     def delete_article(self):                      #删除文章
         self.status = 2                             # 标记为已删除状态
         db.session.commit()
-
-    @classmethod
-    def get_all_articles(cls):
-        """获取所有文章数据"""
-        return cls.query.all()
-
+        
     @classmethod
     def get_articles_by_status(cls, status):
         """根据状态获取文章"""
