@@ -271,8 +271,8 @@ class Alike(db.Model):
 
 class Follow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    follower_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 关注者的用户ID
-    followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 被关注者的用户ID
+    follower_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  
+    followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)  # 关注的时间戳
 
     def __repr__(self):
