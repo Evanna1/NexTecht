@@ -1,3 +1,4 @@
+import os
 from flask import jsonify, request, Blueprint
 from config import Config
 from __init__ import db
@@ -5,14 +6,10 @@ from db import User, Article, Manager
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import functools
 from collections import OrderedDict
+from werkzeug.utils import secure_filename
 
 artical_bp = Blueprint('artical', __name__)
 
-
-# 修改的地方：
-# 1、文章创建函数，增加用户状态和用户权限检查
-# 但是其他函数的用户状态和用户权限检查还没有加入
-# 2、获取文章列表函数
 
 # 管理员权限装饰器
 def admin_required(f):
@@ -129,35 +126,66 @@ def soft_delete_article(article_id):
         db.session.rollback()
         return jsonify({"error": f"软删除文章时出错: {str(e)}"}), 500
 
+#上传图片
+@artical_bp.route('/upload/image', methods=['POST'])
+@jwt_required()  # 需要验证 JWT
+def upload_image():
+    # 获取上传的图片文件
+    image_file = request.files.get('image')
+    if not image_file:
+        return jsonify({"state": 0, "message": "No image provided"}), 400
 
-# 创建文章（用户）
+    # 生成安全的文件名
+    image_filename = secure_filename(image_file.filename)
+
+    # 获取当前文件（register模块）所在的目录
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # 拼接出 blog/public/img 的绝对路径
+    save_path = os.path.abspath(os.path.join(current_dir, '..', '..', '..', 'blog', 'public', 'img'))
+    os.makedirs(save_path, exist_ok=True)
+
+    # 保存图片文件
+    image_file.save(os.path.join(save_path, image_filename))
+
+    # 返回图片的访问路径
+    image_path = f'/img/{image_filename}'
+    return jsonify({"state": 1, "message": "Image uploaded successfully", "image_path": image_path}), 201
+
+#创建文章(图片和tag可选)
 @artical_bp.route('/article/create', methods=['POST'])
 @jwt_required()
 def create_article():
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-
-    # 检查用户状态和发布权限(我新增的)
-    if user.u_status != 0:  # 0表示正常状态,1表示禁止被关注
-        return jsonify({"error": "用户状态异常，禁止发布文章"}), 403
-    if user.is_publish != 1:
-        return jsonify({"error": "当前用户没有发布文章的权限"}), 403
-
-    data = request.json
+    current_user_id = get_jwt_identity()
+    data = request.form
     title = data.get('title')
     content = data.get('content')
+    image_path = data.get('image_path')  # 如果你是用 URL 的话，否则从文件字段拿
+    permission = int(data.get('permission', 0))  # 默认为公开（0）
+    tag = data.get('tag')  # 获取分类标签，如果没有提供，则为 None
 
     if not title or not content:
-        return jsonify({"error": "标题和内容不能为空"}), 400
+        return jsonify({"state": 0, "message": "Title and content are required"}), 400
 
-    new_article = Article(title=title, content=content, user_id=user_id)
-    try:
-        db.session.add(new_article)
-        db.session.commit()
-        return jsonify(new_article.to_dict()), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": f"创建文章时出错: {str(e)}"}), 500
+    new_article = Article(
+        title=title,
+        content=content,
+        user_id=current_user_id,
+        image_path=image_path if image_path else None,  # 如果没有图片路径，则设置为 None
+        tag=tag if tag else None,  # 如果没有提供 tag，则设置为 None
+        permission=permission  # 0: 公开，1: 私密
+    )
+
+    db.session.add(new_article)
+    db.session.commit()
+
+    return jsonify({"state": 1, "message": "Article created successfully", "article_id": new_article.id}), 201
+
+#根据tag获取文章
+@artical_bp.route('/articles/by_tag/<string:tag>', methods=['GET'])
+def get_articles_by_tag(tag):
+    articles = Article.query.filter_by(tag=tag).all()
+    return jsonify([article.to_dict() for article in articles])
 
 
 # 获取特定用户文章列表（管理员和用户均可）
@@ -183,7 +211,7 @@ def get_articles():
     return jsonify([article.to_dict() for article in articles])
 
 
-# 更新文章（用户）
+#更新文章，加上了图片更新和tag功能
 @artical_bp.route('/article/update/<int:article_id>', methods=['PUT'])
 @jwt_required()
 def update_article_by_user(article_id):
@@ -200,11 +228,14 @@ def update_article_by_user(article_id):
     data = request.json
     new_title = data.get('title')
     new_content = data.get('content')
+    new_image_path = data.get('image_path')  # 获取新的图片路径
+    new_tag = data.get('tag')  # 获取新的分类标签
+    if not new_title and not new_content and new_tag is None and new_image_path is None:
+        return jsonify({"error": "至少需要提供新的标题、内容、分类标签或图片"}), 400
 
-    if not new_title and not new_content:
-        return jsonify({"error": "至少需要提供新的标题或内容"}), 400
+    # 更新文章
+    article.update_article(new_title, new_content, new_tag=new_tag, new_image_path=new_image_path)
 
-    article.update_article(new_title, new_content)
     return jsonify(article.to_dict())
 
 
@@ -225,45 +256,17 @@ def delete_article_by_user(article_id):
         article.delete_article()
         return jsonify({'message': 'Article deleted successfully'})
     except Exception as e:
-        return jsonify({"error": f"删除文章时出错: {str(e)}"}), 500
-#
-# @artical_bp.route('/article/browsesList/<int:user_id>', methods=['GET'])
-# @jwt_required()
-# def get_user_browses(user_id):
-#     current_user_id = get_jwt_identity()
-#     current_user_id = int(current_user_id)
-#
-#     if current_user_id != user_id:
-#         return jsonify({"state": 0, "message": "Unauthorized"}), 403
-#
-#     browse_records = UserBrowseRecord.query.filter_by(user_id=user_id).order_by(UserBrowseRecord.browse_time.desc()).all()
-#
-#     browsed_articles = [
-#         {
-#             "id": record.article.id,
-#             "title": record.article.title,
-#             "browse_time": record.browse_time.isoformat()
-#         }
-#         for record in browse_records
-#     ]
-#
-#     return jsonify({"state": 1, "message": "Browse records retrieved successfully", "browses": browsed_articles})
-#
-# @artical_bp.route('/article/browsesArtical', methods=['POST'])
-# @jwt_required()
-# def add_browse_record():
-#     current_user_id = get_jwt_identity()
-#     data = request.get_json()
-#
-#     article_id = data.get('article_id')
-#     if not article_id:
-#         return jsonify({"state": 0, "message": "article_id is required"}), 400
-#
-#     new_record = UserBrowseRecord(user_id=current_user_id, article_id=article_id)
-#     db.session.add(new_record)
-#     db.session.commit()
-#
-#     return jsonify({"state": 1, "message": "Browse record saved successfully"})
+        return jsonify({"error": f"删除文章时出错: {str(e)}"}), 500 
+
+
+# 获取特定文章详情（用户专用）
+@artical_bp.route('/user/article_content/<int:article_id>', methods=['GET'])
+def get_article_content(article_id):
+    article = get_article_or_404(article_id)
+    # 更新阅读量
+    article.read_count = article.read_count + 1
+    db.session.commit()  
+    return jsonify({"state": 1, "message": "details of article", "article": article.to_dict()})
 
 
 
