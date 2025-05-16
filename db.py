@@ -273,3 +273,15 @@ class Follow(db.Model):
     def __repr__(self):
         return f'<Follow follower: {self.follower_id}, followed: {self.followed_id}>'
 
+class UserBrowseRecord(db.Model):
+    __tablename__ = 'user_browse_record'
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    article_id = db.Column(db.Integer, db.ForeignKey('article.id'), nullable=False)
+    browse_time = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('records', lazy=True))  # 与 User 的关系
+    article = db.relationship('Article', backref=db.backref('records', lazy=True))  # 与 Article 的关系
+
+    def __repr__(self):
+        return f'<BrowseRecord User {self.user_id} viewed Article {self.article_id} at {self.browse_time.isoformat()}>'

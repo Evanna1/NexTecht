@@ -2,14 +2,18 @@ import os
 from flask import jsonify, request, Blueprint
 from config import Config
 from __init__ import db
-from db import User, Article, Manager
+from db import User, Article, Manager, UserBrowseRecord, Alike
 from flask_jwt_extended import jwt_required, get_jwt_identity
 import functools
 from collections import OrderedDict
 from werkzeug.utils import secure_filename
+from datetime import datetime
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import random
+
 
 artical_bp = Blueprint('artical', __name__)
-
 
 # 管理员权限装饰器
 def admin_required(f):
@@ -29,6 +33,11 @@ def get_article_or_404(article_id):
     """获取文章对象,如果不存在则返回404"""
     article = Article.query.get_or_404(article_id)
     return article
+
+def get_browses(user_id):
+    records = UserBrowseRecord.query.filter_by(user_id=user_id).order_by(UserBrowseRecord.browse_time.desc()).all()
+    article_ids = [record.article_id for record in records]
+    return article_ids  # ✅ 返回纯数据列表
 
 
 # 获取所有文章列表（管理员专用）
@@ -127,7 +136,7 @@ def soft_delete_article(article_id):
         return jsonify({"error": f"软删除文章时出错: {str(e)}"}), 500
 
 #上传图片
-@artical_bp.route('/upload/image', methods=['POST'])
+@artical_bp.route('/article/upload/image', methods=['POST'])
 @jwt_required()  # 需要验证 JWT
 def upload_image():
     # 获取上传的图片文件
@@ -157,7 +166,10 @@ def upload_image():
 @jwt_required()
 def create_article():
     current_user_id = get_jwt_identity()
-    data = request.form
+
+    # data = request.form
+    data = request.get_json()
+
     title = data.get('title')
     content = data.get('content')
     image_path = data.get('image_path')  # 如果你是用 URL 的话，否则从文件字段拿
@@ -261,16 +273,156 @@ def delete_article_by_user(article_id):
 
 # 获取特定文章详情（用户专用）
 @artical_bp.route('/user/article_content/<int:article_id>', methods=['GET'])
+@jwt_required()
 def get_article_content(article_id):
+    current_user_id = get_jwt_identity()
     article = get_article_or_404(article_id)
+    if not article:
+        return jsonify({"state": 0, "message": "Article not found"}), 404
     # 更新阅读量
     article.read_count = article.read_count + 1
+    new_record = UserBrowseRecord(
+        user_id=current_user_id,
+        article_id=article_id,
+        browse_time=datetime.utcnow()
+    )
+    db.session.add(new_record)
     db.session.commit()  
     return jsonify({"state": 1, "message": "details of article", "article": article.to_dict()})
 
+# 获取自己的历史浏览记录（用户专用）
+@artical_bp.route('/article/browses', methods=['GET'])
+@jwt_required()
+def get_user_browses():
+    current_user_id = get_jwt_identity()
+    user_id = int(current_user_id)
 
+    records = UserBrowseRecord.query.filter_by(user_id=user_id).order_by(UserBrowseRecord.browse_time.desc()).all()
 
+    result = [
+        {
+            "article_id": r.article.id,
+            "title": r.article.title,
+            "content": r.article.content,
+            "browse_time": r.browse_time.isoformat()
+        }
+        for r in records
+    ]
 
+    return jsonify({"state": 1, "message": "Browse records retrieved successfully", "browses": result})
+
+# 推荐算法
+@artical_bp.route('/article/recommend', methods=['GET'])
+@jwt_required()
+def recommend_articles():
+    user_id = get_jwt_identity()
+    top_k = 10
+
+    count = 0
+    user_history_ids = get_browses(user_id)
+    articles = Article.query.all()
+    article_texts = [article.title + " " + article.content for article in articles]
+    article_ids = [article.id for article in articles]
+    rec_list = []
+
+    if not user_history_ids:
+        remaining = [a for a in articles]
+        random.shuffle(remaining)  # 或可按创建时间倒序等方式排序
+        for article in remaining:
+            rec_list.append(OrderedDict([
+                ("article_id", article.id),
+                ("title", article.title),
+                ("score", 0)  # 无相似度，打分为 0
+            ]))
+            count += 1
+            if count >= top_k:
+                break
+        return jsonify({"state": 1, "message": "推荐文章列表", "recommendations": rec_list})
+
+    vectorizer = TfidfVectorizer()
+    tfidf_matrix = vectorizer.fit_transform(article_texts)
+
+    indices = [article_ids.index(aid) for aid in user_history_ids if aid in article_ids]
+    if not indices:
+        return jsonify({"state": 0, "message": "用户浏览历史文章不在库中"}), 200
+
+    user_vector = tfidf_matrix[indices].mean(axis=0).A1
+    sim_scores = cosine_similarity(tfidf_matrix, user_vector.reshape(1, -1)).flatten()
+
+    # 排除已读文章
+    for idx in indices:
+        sim_scores[idx] = -1
+
+    # 获取 Top-K 推荐索引
+    top_indices = sim_scores.argsort()[::-1]
+
+    used_ids = set(user_history_ids)
+
+    for i in top_indices:
+        if sim_scores[i] <= 0:
+            continue
+        rec_list.append(OrderedDict([
+            ("article_id", article_ids[i]),
+            ("title", articles[i].title),
+            ("score", round(sim_scores[i], 4))
+        ]))
+        used_ids.add(article_ids[i])
+        count += 1
+        if count >= top_k:
+            break
+
+    # 补足推荐不足的情况
+    if count < top_k:
+        remaining = [a for a in articles if a.id not in used_ids]
+        random.shuffle(remaining)  # 或可按创建时间倒序等方式排序
+        for article in remaining:
+            rec_list.append(OrderedDict([
+                ("article_id", article.id),
+                ("title", article.title),
+                ("score", 0)  # 无相似度，打分为 0
+            ]))
+            count += 1
+            if count >= top_k:
+                break
+
+    return jsonify({"state": 1, "message": "推荐文章列表", "recommendations": rec_list})
+
+# 热度算法
+@artical_bp.route('/article/hot', methods=['GET'])
+def hot_articles():
+    top_k = 10  # 返回前10个热度最高的文章
+    a, b = 3, 1  # 点赞权重3，阅读权重1
+
+    articles = Article.query.all()
+    if not articles:
+        return jsonify({"state": 0, "message": "暂无文章数据"}), 200
+
+    # 计算热度分数
+    articles_with_scores = []
+    for article in articles:
+        article_id = getattr(article, 'id', 0)
+        like_num = Alike.query.filter_by(article_id=article_id).count()
+        read_num = getattr(article, 'read_count', 0) or 0
+        score = a * like_num + b * read_num
+        articles_with_scores.append((article, score))
+
+    # 按热度降序排序
+    articles_with_scores.sort(key=lambda x: x[1], reverse=True)
+
+    # 取 top_k
+    top_articles = articles_with_scores[:top_k]
+
+    # 构造返回结果
+    result = [
+        OrderedDict([
+            ("article_id", art.id),
+            ("title", art.title),
+            ("hot_score", score)
+        ])
+        for art, score in top_articles
+    ]
+
+    return jsonify({"state": 1, "message": "热门文章列表", "articles": result}), 200
 
 
 

@@ -42,6 +42,7 @@ def create_app():
     from server.alike import alike_bp
     from server.comment import comment_bp
     from server.follow import follow_bp
+
     app.register_blueprint(user_bp)
     app.register_blueprint(artical_bp)
     app.register_blueprint(manager_bp)

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from __init__ import db
-from db import User
+from db import User, UserBrowseRecord, Article
 from tokenblock import TokenBlocklist
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
@@ -214,3 +214,4 @@ def logout_user():
     db.session.commit()
 
     return jsonify({"state": 1, "message": "Logout successful"}), 200
+
