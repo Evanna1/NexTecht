@@ -192,6 +192,24 @@ def get_profile():
 
     return jsonify({"state": 1, "message": "Profile fetched successfully", "data": user_info}), 200
 
+@user_bp.route('/user/profile/<int:user_id>', methods=['GET'])
+def get_public_profile(user_id):
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    if user.u_status == 1:
+         return jsonify({"message": "User not found"}), 404
+    user_info = {
+        "id": user.id, # 重要：这里必须包含用户ID
+        "username": user.username,
+        "intro": user.intro,
+        "avatar": user.avatar,
+        "email": user.email,
+        "register_time": user.create_at.strftime('%Y-%m-%d %H:%M:%S') if user.create_at else None,
+        "gender": user.gender
+    }
+    return jsonify(user_info), 200
 
 #用户退出登录
 @user_bp.route('/user/logout', methods=['POST'])

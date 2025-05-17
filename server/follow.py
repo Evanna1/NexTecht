@@ -63,6 +63,7 @@ def get_following_users():
     for follow in following:
         user = User.query.get(follow.followed_id)
         following_users.append({
+            'id': user.id,
             'username': user.username,
             'nickname': user.nickname,
             'avatar': user.avatar,
@@ -82,6 +83,7 @@ def get_followers():
     for follow in followers:
         user = User.query.get(follow.follower_id)
         follower_users.append({
+            'id': user.id,
             'username': user.username,
             'nickname': user.nickname,
             'avatar': user.avatar,
@@ -112,8 +114,135 @@ def get_follow_status(user_id):
         "is_mutual": is_following and is_followed_by
     }), 200
 
+# --- GET /following/<int:user_id> ---
+@follow_bp.route('/following/<int:user_id>', methods=['GET'])
+# This endpoint is public, anyone can see who a user is following
+# If you want to restrict it (e.g., only logged-in users can see lists), add @jwt_required(optional=True) or @jwt_required()
+# For now, making it public as per common social media patterns for viewing profiles
+def get_user_following(user_id):
+    """
+    获取指定用户 (user_id) 关注的用户列表。
+    """
+    # Check if the target user exists
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"message": "User not found"}), 404
+
+    # Query the Follow table to find all entries where the follower is the target user
+    following_relationships = Follow.query.filter_by(follower_id=user_id).all()
+
+    following_users_list = []
+    for follow_rel in following_relationships:
+        # Get the user object for the followed user
+        followed_user = User.query.get(follow_rel.followed_id)
+        # Ensure the user exists before adding to the list (should ideally always exist due to foreign key)
+        if followed_user:
+            following_users_list.append({
+                'id': followed_user.id, # Include user ID as requested
+                'username': followed_user.username,
+                # 'nickname': followed_user.nickname, # Include if your User model has nickname
+                'avatar': followed_user.avatar,
+                'intro': followed_user.intro,
+                # Note: is_following/is_followed_by status relative to the *viewer* is handled by the /friends endpoint
+            })
+
+    # Return the list of users the target user is following
+    # Returning just the list is fine, or wrap in {"data": ...} for consistency
+    return jsonify(following_users_list), 200
+    # Or for consistency with article list: return jsonify({"data": following_users_list}), 200
 
 
+# --- GET /followers/<int:user_id> ---
+@follow_bp.route('/followers/<int:user_id>', methods=['GET'])
+# This endpoint is public, anyone can see who is following a user
+# If you want to restrict it, add @jwt_required(optional=True) or @jwt_required()
+# For now, making it public
+def get_user_followers(user_id):
+    """
+    获取关注指定用户 (user_id) 的用户列表 (粉丝列表)。
+    """
+    # Check if the target user exists
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"message": "User not found"}), 404
+
+    # Query the Follow table to find all entries where the followed is the target user
+    follower_relationships = Follow.query.filter_by(followed_id=user_id).all()
+
+    follower_users_list = []
+    for follow_rel in follower_relationships:
+        # Get the user object for the follower user
+        follower_user = User.query.get(follow_rel.follower_id)
+         # Ensure the user exists
+        if follower_user:
+            follower_users_list.append({
+                'id': follower_user.id, # Include user ID as requested
+                'username': follower_user.username,
+                # 'nickname': follower_user.nickname, # Include if your User model has nickname
+                'avatar': follower_user.avatar,
+                'intro': follower_user.intro,
+                 # Note: is_following/is_followed_by status relative to the *viewer* is handled by the /friends endpoint
+            })
+
+    # Return the list of users who are following the target user
+    return jsonify(follower_users_list), 200
+    # Or for consistency: return jsonify({"data": follower_users_list}), 200
+
+
+# --- GET /friends/<int:user_id> ---
+# This endpoint checks the follow status *between the CURRENT authenticated user* and the specified user_id
+@follow_bp.route('/friends/<int:user_id>', methods=['GET'])
+# This endpoint requires authentication because it's about the CURRENT user's relationship
+@jwt_required()
+# Renamed the function to avoid endpoint name conflict
+def get_user_follow_status(user_id):
+    """
+    获取当前登录用户与指定用户 (user_id) 之间的关注状态。
+    返回 is_following (当前用户是否关注了 user_id),
+    is_followed_by (user_id 是否关注了当前用户),
+    is_mutual (是否互相关注)。
+    """
+    # Get the ID of the currently authenticated user from the JWT
+    current_user_id = get_jwt_identity()
+
+    # Check if the target user exists
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"message": "Target user not found"}), 404
+
+    # Prevent checking status against self (optional, frontend should ideally handle this)
+    if int(current_user_id) == user_id:
+         # You might return a specific status or just the counts in this case
+         # For simplicity, let's return a status indicating it's the same user
+         return jsonify({
+             "is_following": False, # You don't follow yourself in this context
+             "is_followed_by": False, # You are not followed by yourself
+             "is_mutual": False,
+             "is_self": True # Indicate it's the current user
+         }), 200
+
+
+    # Check if the current user is following the target user
+    is_following = Follow.query.filter_by(
+        follower_id=current_user_id,
+        followed_id=user_id
+    ).first() is not None
+
+    # Check if the target user is following the current user
+    is_followed_by = Follow.query.filter_by(
+        follower_id=user_id,
+        followed_id=current_user_id
+    ).first() is not None
+
+    # Determine if they are mutually following
+    is_mutual = is_following and is_followed_by
+
+    # Return the status
+    return jsonify({
+        "is_following": is_following,
+        "is_followed_by": is_followed_by,
+        "is_mutual": is_mutual
+    }), 200
 
 
 

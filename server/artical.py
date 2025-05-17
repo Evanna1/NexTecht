@@ -424,6 +424,46 @@ def hot_articles():
 
     return jsonify({"state": 1, "message": "热门文章列表", "articles": result}), 200
 
+# 定义获取指定用户文章列表的路由
+@artical_bp.route('/article/list/by-user/<int:user_id>', methods=['GET'])
+# 使用 optional=True，表示这个接口可以带 JWT 访问，也可以不带
+@jwt_required(optional=True)
+def get_user_articles(user_id):
+    # 获取当前登录用户的 ID，如果未登录则为 None
+    current_user_id = get_jwt_identity()
+
+    # 基础查询：获取属于该用户的文章
+    query = Article.query.filter_by(user_id=user_id)
+
+    # 根据访问者的身份应用权限过滤
+    # 注意：Python 的身份比较用 'is' 或 '==' 都可以，这里用 == 更通用
+    if current_user_id is None or current_user_id != user_id:
+        # 如果当前用户未登录，或者当前用户不是文章作者
+        # 只能看到 permission 为 0 的文章（公开文章）
+        query = query.filter_by(permission=0)
+    # 否则 (else)，说明 current_user_id == user_id，即访问者是作者本人
+    # 作者本人可以看到自己的所有文章，不需要额外的 permission 过滤
+
+    # 对文章按创建时间倒序排序（通常是这样）
+    articles = query.order_by(Article.create_time.desc()).all()
+
+    # 准备返回的文章列表数据
+    articles_list = []
+    for article in articles:
+        articles_list.append({
+            "id": article.id,
+            "title": article.title,
+            "content": article.content,
+            "tag": article.tag,
+            "permission": article.permission, # 可以返回 permission，前端知道这是公开还是私密
+            "create_at": article.create_time.strftime('%Y-%m-%d %H:%M:%S') if article.create_time else None,
+            # 如果需要作者信息，也可以在这里加入，但通常在用户主页接口中获取更合适
+            # "author_id": article.author_id,
+        })
+    print(f"Debug: User ID: {user_id}, Current User ID: {current_user_id}")
+    print(f"Debug: Final articles_list count: {len(articles_list)}")
+    print(f"Debug: Final articles_list content: {articles_list}")  # 打印列表内容看是否为空或包含预期文章
+    return jsonify({"data": articles_list}), 200
 
 
 
