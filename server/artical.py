@@ -45,19 +45,12 @@ def get_browses(user_id):
 @admin_required
 def get_all_articles():
     articles = Article.query.all()
-    articles_list = [
-        OrderedDict([
-            ("id", article.id),
-            ("title", article.title),
-            ("user_id", article.user_id),
-            ("create_time", article.create_time.isoformat() if article.create_time else None),
-            ("status", article.status),
-            ("permission", article.permission)
-        ])
-        for article in articles
-    ]
-
-    return jsonify({"state": 1, "message": "List of articles", "articles": articles_list})
+    articles_list = [article.to_dict() for article in articles]
+    return jsonify({
+        "state": 1,
+        "message": "List of articles",
+        "articles": articles_list
+    })
 
 
 # 获取特定文章详情（管理员专用）
@@ -464,7 +457,6 @@ def get_user_articles(user_id):
     print(f"Debug: Final articles_list count: {len(articles_list)}")
     print(f"Debug: Final articles_list content: {articles_list}")  # 打印列表内容看是否为空或包含预期文章
     return jsonify({"data": articles_list}), 200
-
 
 
 

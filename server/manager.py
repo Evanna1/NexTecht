@@ -279,29 +279,11 @@ def list_users():
     if not current_manager:
         return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
     
-    # 获取所有用户信息
+    # 查询所有用户
     users = User.query.all()
-    users_list = [
-        OrderedDict([
-            ("id", user.id),
-            ("username", user.username),
-            ("nickname", user.nickname),
-            ("avatar", f"/static/{user.avatar}" if user.avatar else "/static/dog.jpg"),
-            ("gender", user.gender),
-            ("email", user.email),
-            ("phone", user.phone),
-            ("create_at", user.create_at.isoformat() if user.create_at else None),
-            ("last_login_at", user.last_login_at.isoformat() if user.last_login_at else None),
-            ("is_online", user.is_online if hasattr(user, 'is_online') else 0),
-            ("u_status", user.u_status),
-            ("is_publish", user.is_publish),
-            ("is_comment", user.is_comment),
-            ("article_count", len(user.articles) if hasattr(user, 'articles') else 0),
-            ("comment_count", user.comment_count if hasattr(user, 'comment_count') else 0),
-            ("like_count", user.like_count if hasattr(user, 'like_count') else 0)
-        ])
-        for user in users
-    ]
+
+    # 将用户对象转换为字典列表，调用模型中的 to_dict() 方法
+    users_list = [user.to_dict() for user in users]
 
     return jsonify({"state": 1, "message": "List of users", "users": users_list})
 
@@ -372,10 +354,11 @@ def update_user_status():
 #管理员修改用户权限接口
 """输入：
     {
-        "u_account": 123,                 // 必填,要修改的用户名
-        "permission_type": "is_publish",  //必填,权限类型(is_publish/is_comment)
-        "new_value": 0                    //必填,新权限值(0/1)
+        "u_account": "...",
+        "is_publish": 1,
+        "is_comment": 0
     }
+
 """
 @manager_bp.route('/manager/update_user_permission', methods=['POST'])
 @jwt_required()
@@ -387,46 +370,45 @@ def update_user_permission():
         return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
 
     data = request.get_json()
-    
-    # 参数校验
-    required_fields = ['u_account', 'permission_type', 'new_value']
-    if not all(field in data for field in required_fields):
-        return jsonify({"state": 0, "message": "缺少必要参数"}), 400
+
+    # 参数校验：必须有 u_account，其他权限字段为可选
+    if 'u_account' not in data:
+        return jsonify({"state": 0, "message": "缺少必要参数 u_account"}), 400
 
     user_account = data.get('u_account')
-    perm_type = data.get('permission_type')
-    new_value = data.get('new_value')
 
     # 验证目标用户
-    target_user = User.query.filter((User.id == user_account) | (User.username == user_account) | (User.email == user_account) | (User.phone == user_account)).first()
+    target_user = User.query.filter(
+        (User.id == user_account) |
+        (User.username == user_account) |
+        (User.email == user_account) |
+        (User.phone == user_account)
+    ).first()
+
     if not target_user:
         return jsonify({"state": 0, "message": "用户不存在"}), 404
-    
-    # 验证权限类型有效性
-    if perm_type not in ['is_publish', 'is_comment']:
-        return jsonify({
-            "state": 0,
-            "message": "无效的权限类型,可选值:is_publish/is_comment"
-        }), 400
 
-    # 验证权限值有效性
-    if new_value not in [0, 1]:
-        return jsonify({
-            "state": 0,
-            "message": "无效的权限值,只能设置为0或1"
-        }), 400
+    updated_permissions = {}
+    valid_fields = ['is_publish', 'is_comment']
 
-    # 执行权限更新
     try:
-        setattr(target_user, perm_type, new_value)
+        for field in valid_fields:
+            if field in data:
+                val = data[field]
+                if val not in [0, 1]:
+                    return jsonify({"state": 0, "message": f"无效的权限值 {field}，只能是0或1"}), 400
+                setattr(target_user, field, val)
+                updated_permissions[field] = val
+
+        if not updated_permissions:
+            return jsonify({"state": 0, "message": "未提供有效的权限字段"}), 400
+
         db.session.commit()
         return jsonify({
             "state": 1,
             "message": "用户权限更新成功",
             "user_account": user_account,
-            "updated_permission": {
-                perm_type: new_value
-            }
+            "updated_permission": updated_permissions
         })
     except Exception as e:
         db.session.rollback()
@@ -434,4 +416,3 @@ def update_user_permission():
             "state": 0,
             "message": f"用户权限更新失败: {str(e)}"
         }), 500
-    
