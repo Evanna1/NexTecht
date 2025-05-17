@@ -47,7 +47,6 @@ def manager_login():
          "m_password": "secure_password123",
          "m_gender": "男",
          "m_nickname": "NewAdmin",
-         "m_avatar": "https://example.com/avatar.jpg",
          "m_phone": "13800138000",
          "m_email": "new_manager@example.com"
         }
@@ -70,7 +69,6 @@ def add_manager():
     new_mng_password = data.get('m_password')
     new_mng_gender = data.get('m_gender')
     new_mng_nickname = data.get('m_nickname')
-    new_mng_avatar = data.get('m_avatar')
     new_mng_phone = data.get('m_phone')
     new_mng_email = data.get('m_email')
 
@@ -87,7 +85,6 @@ def add_manager():
         mng_name=new_mng_name,
         mng_gender=new_mng_gender,
         mng_nickname=new_mng_nickname,
-        mng_avatar=new_mng_avatar,
         mng_phone=new_mng_phone,
         mng_email=new_mng_email
     )
@@ -192,7 +189,7 @@ def get_manager_profile():
         return jsonify({"state": 0, "message": "管理员身份验证失败"}), 404
     
     manager_info = OrderedDict([
-        ("mng_avatar", f"/static/{current_manager.mng_avatar}" if current_manager.mng_avatar else "/static/dog.jpg"),
+        ("mng_avatar", f"/static/{current_manager.mng_avatar}" if current_manager.mng_avatar else "/static/my.jpg"),
         ("mng_id", current_manager.mng_id),
         ("mng_name", current_manager.mng_name),
         ("mng_gender", current_manager.mng_gender),
@@ -294,15 +291,14 @@ def list_users():
             ("email", user.email),
             ("phone", user.phone),
             ("create_at", user.create_at.isoformat() if user.create_at else None),
-            #("last_login", user.last_login.isoformat() if hasattr(user, 'last_login') else None),
-            #("login_count", user.login_count if hasattr(user, 'login_count') else 0),
+            ("last_login_at", user.last_login_at.isoformat() if user.last_login_at else None),
+            ("is_online", user.is_online if hasattr(user, 'is_online') else 0),
             ("u_status", user.u_status),
             ("is_publish", user.is_publish),
             ("is_comment", user.is_comment),
             ("article_count", len(user.articles) if hasattr(user, 'articles') else 0),
             ("comment_count", user.comment_count if hasattr(user, 'comment_count') else 0),
             ("like_count", user.like_count if hasattr(user, 'like_count') else 0)
-            #("notes", user.notes if hasattr(user, 'notes') else "无")
         ])
         for user in users
     ]
