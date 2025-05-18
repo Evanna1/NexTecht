@@ -306,12 +306,6 @@ def update_user_profile():
             avatar_path = f'/img/{avatar_filename}'
             print(f"Generated avatar URL path: {avatar_path}")
             updated_data['avatar'] = avatar_path
-
-        else:
-            avatar_path = '/img/default-avatar.png'
-            updated_data['avatar'] = avatar_path
-
-
         # --- 更新数据库中的用户信息 ---
         if updated_data:
             for key, value in updated_data.items():
