@@ -310,7 +310,6 @@ def get_user_browses():
 @jwt_required()
 def recommend_articles():
     user_id = get_jwt_identity()
-    print(f"User ID from JWT: {user_id}")
     top_k = 10
 
     count = 0
@@ -357,9 +356,9 @@ def recommend_articles():
     user_vector = tfidf_matrix[indices].mean(axis=0).A1
     sim_scores = cosine_similarity(tfidf_matrix, user_vector.reshape(1, -1)).flatten()
 
-    # 排除已读文章
-    for idx in indices:
-        sim_scores[idx] = -1
+    # # 排除已读文章
+    # for idx in indices:
+    #     sim_scores[idx] = -1
 
     # 获取 Top-K 推荐索引
     top_indices = sim_scores.argsort()[::-1]

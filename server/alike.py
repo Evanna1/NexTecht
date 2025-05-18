@@ -125,3 +125,31 @@ def get_user_likes():
         "data": liked_articles
     }), 200
 
+
+# --- 新增接口 1: 检查用户是否点赞某文章 ---
+@alike_bp.route('/alike/check_liked/<int:article_id>', methods=['GET'])
+@jwt_required()  # 需要JWT认证
+def check_article_liked(article_id):
+    current_user_id = get_jwt_identity()  # 获取当前登录用户的ID (通常是字符串，如果您的jwt identity是用户ID的话)
+
+    # 确保 user_id 是正确的类型，通常是整数
+    try:
+        user_id = int(current_user_id)
+    except (ValueError, TypeError):
+        return jsonify({"state": 0, "message": "Invalid user identity"}), 401  # JWT identity无效
+
+    article = Article.query.get(article_id)
+    if not article:
+        return jsonify({"state": 0, "message": "Article not found"}), 404
+
+    # 查询 Alike 表，判断当前用户是否点赞了这篇文章
+    alike_record = Alike.query.filter_by(user_id=user_id, article_id=article_id).first()
+
+    is_liked = alike_record is not None  # 如果找到了记录，说明已点赞
+
+    return jsonify({
+        "state": 1,
+        "message": "Like status checked successfully",
+        "is_liked": is_liked
+    }), 200
+

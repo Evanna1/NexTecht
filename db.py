@@ -158,6 +158,7 @@ class Article(db.Model):
             'create_time': self.create_time.isoformat() if self.create_time else None,  # Handle potential None
             'update_time': self.update_time.isoformat() if self.update_time else None,
             'author': self.user.username if self.user else 'Unknown',  # Handle potential missing user
+            'user_id': self.user_id if self.user else 'Unknown',
             'permission': self.permission,
             'status': self.status,
             'read_count': self.read_count,
@@ -311,6 +312,11 @@ class Follow(db.Model):
     follower_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)  # 关注的时间戳
+
+    # 关注者（发起关注的用户）
+    follower = db.relationship('User', foreign_keys=[follower_id], backref=db.backref('followings', lazy='dynamic'))
+    # 被关注者（被关注的用户）
+    followed = db.relationship('User', foreign_keys=[followed_id], backref=db.backref('followers', lazy='dynamic'))
 
     def __repr__(self):
         return f'<Follow follower: {self.follower_id}, followed: {self.followed_id}>'
