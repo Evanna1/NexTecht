@@ -7,51 +7,67 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime
 from flask_mail import Message, Mail
 from twilio.rest import Client
+from werkzeug.utils import secure_filename
+import os
 
 # 创建蓝图
 user_bp = Blueprint('user', __name__)
 
 @user_bp.route('/user/register', methods=['POST'])
 def register_user():
-    data = request.get_json()  # 获取请求的JSON数据
+    data = request.form
+    avatar_file = request.files.get('avatar')
 
-    # 获取输入字段
-    username = data.get('username')
+    username = data.get('u_nickname')  # 注意字段名要跟前端传的一致
     password = data.get('u_password')
     gender = data.get('gender')
     nickname = data.get('u_nickname')
-    intro = data.get('u_intro', '')  # 个人介绍，默认为空
-    avatar = data.get('avatar', '')  # 头像，默认为空
-    phone = data.get('phone', None)  # 手机号，选填
+    intro = data.get('u_intro', '')
+    phone = data.get('phone')
     email = data.get('u_email')
 
-
-    if User.query.filter_by(username=username).first():
-        return jsonify({"state": 0, "message": "Username already exists"}), 400
+    # 这里检查用户名和邮箱是否存在，用户名字段用 nickname 就好，或者你统一用 username
+    if User.query.filter_by(nickname=nickname).first():
+        return jsonify({"state": 0, "message": "用户名已存在"}), 400
 
     if User.query.filter_by(email=email).first():
-        return jsonify({"state": 0, "message": "Email already exists"}), 400
+        return jsonify({"state": 0, "message": "邮箱已存在"}), 400
 
-    # 创建新用户
+    # 头像文件处理，如果需要保存文件，写你的逻辑
+    if avatar_file:
+        avatar_filename = secure_filename(avatar_file.filename)
+
+        # 获取当前文件（register模块）所在的目录
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        print(current_dir)
+
+        # 拼接出 blog/public/img 的绝对路径
+        save_path = os.path.abspath(os.path.join(current_dir, '..', '..', '@latest', 'public', 'img'))
+        os.makedirs(save_path, exist_ok=True)
+
+        avatar_file.save(os.path.join(save_path, avatar_filename))
+
+        avatar_path = f'/img/{avatar_filename}'
+    else:
+        avatar_path = '/img/default-avatar.png'
+
     new_user = User(
-        username=username,
+        username=nickname,
         gender=gender,
         nickname=nickname,
         intro=intro,
-        avatar=avatar,
+        avatar=avatar_path,
         create_at=datetime.utcnow(),
         phone=phone,
         email=email
     )
 
-    # 设置加密密码
     new_user.set_password(password)
 
-    # 将用户数据保存到数据库
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({"state": 1, "message": "Account created successfully"})
+    return jsonify({"state": 1, "message": "注册成功"})
 
 @user_bp.route('/user/login', methods=['POST'])
 def login_user():

@@ -153,7 +153,6 @@ class Article(db.Model):
             'title': self.title,
             'content': self.content,
             'create_time': self.create_time.isoformat(),
-            'update_time': self.update_time.isoformat(),
             'author': self.user.username,
             'permission': self.permission,  # 新增权限位
             'status': self.status,  # 新增状态位

@@ -160,7 +160,13 @@ def upload_image():
 @jwt_required()
 def create_article():
     current_user_id = get_jwt_identity()
+<<<<<<< HEAD
     data = request.form
+=======
+
+    data = request.form
+
+>>>>>>> fde52f3 (添加了ai辅助)
     title = data.get('title')
     content = data.get('content')
     image_path = data.get('image_path')  # 如果你是用 URL 的话，否则从文件字段拿
@@ -456,7 +462,6 @@ def get_user_articles(user_id):
     print(f"Debug: Final articles_list content: {articles_list}")  # 打印列表内容看是否为空或包含预期文章
     return jsonify({"data": articles_list}), 200
 
-
 # ai 请求
 @artical_bp.route('/article/aichat', methods=['POST'])
 @jwt_required()
@@ -485,14 +490,13 @@ def gemini_chat():
         res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
         res.raise_for_status()
         result = res.json()
-
+        
         answer = result['candidates'][0]['content']['parts'][0]['text']
 
     except Exception as e:
         return jsonify({'error': '调用 Gemini API 失败', 'detail': str(e)}), 500
 
     return jsonify({"user_id": current_user_id, "answer": answer}), 200
-
 
 
 
