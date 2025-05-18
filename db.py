@@ -147,6 +147,8 @@ class Article(db.Model):
     read_count = db.Column(db.Integer, default=0)
     image_path = db.Column(db.String(256))  # 图片路径字段
     tag = db.Column(db.String(128))  # 文章分类标签字段
+    like_count = db.Column(db.Integer, default=0)  # 文章点赞数
+    favorite_count = db.Column(db.Integer, default=0)  # 文章收藏数
 
     def to_dict(self):  # 字典，方便转为json
         return {
@@ -160,9 +162,9 @@ class Article(db.Model):
             'status': self.status,
             'read_count': self.read_count,
             'image_path': self.image_path,
-            'tag': self.tag
-            # Future: Add 'like_count': self.like_count if hasattr(self, 'like_count') else 0,
-            # Future: Add 'favorite_count': self.favorite_count if hasattr(self, 'favorite_count') else 0,
+            'like_count': self.like_count,  # 确保 to_dict 包含
+            'favorite_count': self.favorite_count,  # 确保 to_dict 包含
+            'tag': self.tag,
         }
 
     def update_article(self, new_title=None, new_content=None, new_permission=None, new_status=None,

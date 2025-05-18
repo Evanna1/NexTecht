@@ -43,6 +43,7 @@ def create_app():
     from server.comment import comment_bp
     from server.follow import follow_bp
     from server.commentlike import commentlike_bp
+    from server.articalfavorite import articalfavo_bp
     app.register_blueprint(user_bp)
     app.register_blueprint(artical_bp)
     app.register_blueprint(manager_bp)
@@ -50,5 +51,5 @@ def create_app():
     app.register_blueprint(comment_bp)
     app.register_blueprint(follow_bp)
     app.register_blueprint(commentlike_bp)
- 
+    app.register_blueprint(articalfavo_bp)
     return app

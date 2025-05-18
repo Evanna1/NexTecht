@@ -310,22 +310,36 @@ def get_user_browses():
 @jwt_required()
 def recommend_articles():
     user_id = get_jwt_identity()
+    print(f"User ID from JWT: {user_id}")
     top_k = 10
 
     count = 0
     user_history_ids = get_browses(user_id)
     articles = Article.query.all()
-    article_texts = [article.title + " " + article.content for article in articles]
-    article_ids = [article.id for article in articles]
+    article_data = []
+    article_texts = []
+    article_ids = []
+    for article in articles:
+        article_data.append(article)
+        article_texts.append(article.title + " " + article.content)
+        article_ids.append(article.id)
     rec_list = []
 
     if not user_history_ids:
-        remaining = [a for a in articles]
+        remaining = [a for a in article_data]
         random.shuffle(remaining)  # 或可按创建时间倒序等方式排序
         for article in remaining:
             rec_list.append(OrderedDict([
                 ("article_id", article.id),
+                ("userId", article.user_id),
                 ("title", article.title),
+                ("content", article.content),
+                ("tags", article.tag.split(',') if article.tag else []), # 直接使用 article.tag 并分割
+                ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
+                ("authorName", article.user.username if article.user else None), # 使用 user.username
+                ("createdAt", article.create_time.isoformat()),
+                ("views", article.read_count),
+                ("likes", len(getattr(article, 'likes', []))), # 假设有点赞关系
                 ("score", 0)  # 无相似度，打分为 0
             ]))
             count += 1
@@ -355,9 +369,18 @@ def recommend_articles():
     for i in top_indices:
         if sim_scores[i] <= 0:
             continue
+        article = article_data[i]
         rec_list.append(OrderedDict([
-            ("article_id", article_ids[i]),
-            ("title", articles[i].title),
+            ("article_id", article.id),
+            ("userId", article.user_id),
+            ("title", article.title),
+            ("content", article.content),
+            ("tags", article.tag.split(',') if article.tag else []), # 直接使用 article.tag 并分割
+            ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
+            ("authorName", article.user.username if article.user else None), # 使用 user.username
+            ("createdAt", article.create_time.isoformat()),
+            ("views", article.read_count),
+            ("likes", len(getattr(article, 'likes', []))), # 假设有点赞关系
             ("score", round(sim_scores[i], 4))
         ]))
         used_ids.add(article_ids[i])
@@ -367,12 +390,20 @@ def recommend_articles():
 
     # 补足推荐不足的情况
     if count < top_k:
-        remaining = [a for a in articles if a.id not in used_ids]
+        remaining = [a for a in article_data if a.id not in used_ids]
         random.shuffle(remaining)  # 或可按创建时间倒序等方式排序
         for article in remaining:
             rec_list.append(OrderedDict([
                 ("article_id", article.id),
+                ("userId", article.user_id),
                 ("title", article.title),
+                ("content", article.content),
+                ("tags", article.tag.split(',') if article.tag else []), # 直接使用 article.tag 并分割
+                ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
+                ("authorName", article.user.username if article.user else None), # 使用 user.username
+                ("createdAt", article.create_time.isoformat()),
+                ("views", article.read_count),
+                ("likes", len(getattr(article, 'likes', []))), # 假设有点赞关系
                 ("score", 0)  # 无相似度，打分为 0
             ]))
             count += 1
