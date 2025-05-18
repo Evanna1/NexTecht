@@ -12,6 +12,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import random
 import logging
+import requests
 from sqlalchemy.exc import IntegrityError
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -458,6 +459,40 @@ def get_user_articles(user_id):
     print(f"Debug: Final articles_list content: {articles_list}")  # 打印列表内容看是否为空或包含预期文章
     return jsonify({"data": articles_list}), 200
 
+# ai 请求
+@artical_bp.route('/article/aichat', methods=['POST'])
+@jwt_required()
+def gemini_chat():
+    data = request.get_json()
+    question = data.get('question', '').strip()
+    if not question:
+        return jsonify({'error': '问题不能为空'}), 400
 
+    current_user_id = get_jwt_identity()
+    API_KEY = "AIzaSyAqCi0TbDt-7ES6E4FT2vSKdG8993uTj8I"
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}"
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": question}
+                ]
+            }
+        ]
+    }
+
+    try:
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        res.raise_for_status()
+        result = res.json()
+
+        answer = result['candidates'][0]['content']['parts'][0]['text']
+
+    except Exception as e:
+        return jsonify({'error': '调用 Gemini API 失败', 'detail': str(e)}), 500
+
+    return jsonify({"user_id": current_user_id, "answer": answer}), 200
 
 
