@@ -4,7 +4,7 @@ import secrets
 class Config:
     # MySQL 连接配置
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://root:evanna.1@localhost/NexTecht")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "mysql+pymysql://root:xjn040623@localhost:3306/myblog")
 
     # 邮件服务器配置
     MAIL_SERVER = 'smtp.qq.com'  # 替换为你的 SMTP 服务器

@@ -42,12 +42,13 @@ def create_app():
     from server.alike import alike_bp
     from server.comment import comment_bp
     from server.follow import follow_bp
-
+    from server.commentlike import commentlike_bp
     app.register_blueprint(user_bp)
     app.register_blueprint(artical_bp)
     app.register_blueprint(manager_bp)
     app.register_blueprint(alike_bp)
     app.register_blueprint(comment_bp)
     app.register_blueprint(follow_bp)
+    app.register_blueprint(commentlike_bp)
  
     return app

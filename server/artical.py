@@ -11,8 +11,9 @@ from datetime import datetime
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import random
-import requests
-
+import logging
+from sqlalchemy.exc import IntegrityError
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 artical_bp = Blueprint('artical', __name__)
 
@@ -160,13 +161,7 @@ def upload_image():
 @jwt_required()
 def create_article():
     current_user_id = get_jwt_identity()
-<<<<<<< HEAD
     data = request.form
-=======
-
-    data = request.form
-
->>>>>>> fde52f3 (添加了ai辅助)
     title = data.get('title')
     content = data.get('content')
     image_path = data.get('image_path')  # 如果你是用 URL 的话，否则从文件字段拿
@@ -265,8 +260,7 @@ def delete_article_by_user(article_id):
         article.delete_article()
         return jsonify({'message': 'Article deleted successfully'})
     except Exception as e:
-        return jsonify({"error": f"删除文章时出错: {str(e)}"}), 500 
-
+        return jsonify({"error": f"删除文章时出错: {str(e)}"}), 500
 
 # 获取特定文章详情（用户专用）
 @artical_bp.route('/user/article_content/<int:article_id>', methods=['GET'])
@@ -284,8 +278,10 @@ def get_article_content(article_id):
         browse_time=datetime.utcnow()
     )
     db.session.add(new_record)
-    db.session.commit()  
+    db.session.commit()
     return jsonify({"state": 1, "message": "details of article", "article": article.to_dict()})
+
+
 
 # 获取自己的历史浏览记录（用户专用）
 @artical_bp.route('/article/browses', methods=['GET'])
@@ -462,41 +458,6 @@ def get_user_articles(user_id):
     print(f"Debug: Final articles_list content: {articles_list}")  # 打印列表内容看是否为空或包含预期文章
     return jsonify({"data": articles_list}), 200
 
-# ai 请求
-@artical_bp.route('/article/aichat', methods=['POST'])
-@jwt_required()
-def gemini_chat():
-    data = request.get_json()
-    question = data.get('question', '').strip()
-    if not question:
-        return jsonify({'error': '问题不能为空'}), 400
-
-    current_user_id = get_jwt_identity()
-    API_KEY = "AIzaSyAqCi0TbDt-7ES6E4FT2vSKdG8993uTj8I"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}"
-
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": question}
-                ]
-            }
-        ]
-    }
-
-    try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
-        res.raise_for_status()
-        result = res.json()
-        
-        answer = result['candidates'][0]['content']['parts'][0]['text']
-
-    except Exception as e:
-        return jsonify({'error': '调用 Gemini API 失败', 'detail': str(e)}), 500
-
-    return jsonify({"user_id": current_user_id, "answer": answer}), 200
 
 
 

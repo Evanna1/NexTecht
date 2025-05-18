@@ -14,9 +14,9 @@ with app.app_context():
             mng_name="aa",
             mng_gender="0",
             mng_nickname="zzz",
-            mng_avatar = "dgfvcdh",
-            mng_phone = "18352551",
-            mng_email = "2690598534@qq.com"
+            mng_avatar="dgfvcdh",
+            mng_phone="18352551",
+            mng_email="2690598534@qq.com"
         )
         manager0.set_password("1234")  # 设置密码
         db.session.add(manager0)
@@ -24,3 +24,4 @@ with app.app_context():
 
 if __name__ == '__main__':
     app.run(debug=True)  # 在生产环境中应设置为 False
+

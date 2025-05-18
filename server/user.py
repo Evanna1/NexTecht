@@ -1,14 +1,15 @@
 from flask import Blueprint, request, jsonify
 from __init__ import db
-from db import User, UserBrowseRecord, Article
+from db import User
 from tokenblock import TokenBlocklist
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime
-from flask_mail import Message, Mail
-from twilio.rest import Client
 from werkzeug.utils import secure_filename
 import os
+import uuid
+from flask_mail import Message, Mail
+from twilio.rest import Client
 
 # 创建蓝图
 user_bp = Blueprint('user', __name__)
@@ -39,10 +40,9 @@ def register_user():
 
         # 获取当前文件（register模块）所在的目录
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        print(current_dir)
 
         # 拼接出 blog/public/img 的绝对路径
-        save_path = os.path.abspath(os.path.join(current_dir, '..', '..', '@latest', 'public', 'img'))
+        save_path = os.path.abspath(os.path.join(current_dir, '..', '..', '..', 'blog', 'public', 'img'))
         os.makedirs(save_path, exist_ok=True)
 
         avatar_file.save(os.path.join(save_path, avatar_filename))
@@ -69,14 +69,19 @@ def register_user():
 
     return jsonify({"state": 1, "message": "注册成功"})
 
+
 @user_bp.route('/user/login', methods=['POST'])
 def login_user():
-    data = request.get_json()  # 获取请求的JSON数据
+    data = request.get_json()
 
     account = data.get('u_account')
     password = data.get('u_password')
 
-    user = User.query.filter((User.username == account) | (User.email == account) | (User.phone == account)).first()
+    user = User.query.filter(
+        (User.username == account) |
+        (User.email == account) |
+        (User.phone == account)
+    ).first()
 
     if not user:
         return jsonify({"state": 0, "message": "User not found"}), 400
@@ -87,13 +92,23 @@ def login_user():
     if user.u_status == 1:
         return jsonify({"state": 0, "message": "User is not allowed to login"}), 403
 
-    # 更新最后登录时间和在线状态
+    # 更新登录状态
     user.last_login_at = datetime.utcnow()
     user.is_online = True
     token = user.create_access_token()
+    print(f"[DEBUG] 登录成功，生成的 token: {token}")
     db.session.commit()
 
-    return jsonify({"state": 1, "message": "Login successful", "token": token})
+    # 返回头像地址
+    avatar_url = user.avatar if user.avatar else "/default-avatar.png"
+
+    return jsonify({
+        "state": 1,
+        "message": "Login successful",
+        "token": token,
+        "id": user.id,
+        "avatar": avatar_url
+    })
 
 # 发送验证码接口（发送邮件或短信验证码）
 @user_bp.route('/user/sendEmailCode', methods=['POST'])
@@ -139,9 +154,16 @@ def verify_code():
 
     token = user.create_access_token()
 
-    return jsonify({"state": 1, "message": "Login successful", "token": token})
+    avatar_url = user.avatar if user.avatar else "/default-avatar.png"
 
-# 更新用户信息接口
+    return jsonify({
+        "state": 1,
+        "message": "Login successful",
+        "token": token,
+        "avatar": avatar_url
+    }), 200
+
+
 @user_bp.route('/user/updateProfile', methods=['PUT'])
 @jwt_required() # 确保只有认证用户才能访问此接口
 def update_user_profile():
@@ -340,54 +362,6 @@ def update_user_profile():
         print(f"Error updating user profile: {e}")
         return jsonify({"state": 0, "message": "服务器内部错误", "error": str(e)}), 500
 
-# 查看用户信息接口
-@user_bp.route('/user/getProfile', methods=['GET'])
-@jwt_required()  # 需要验证 JWT
-def get_profile():
-    # 从 JWT 获取当前用户的身份信息
-    current_user_id = get_jwt_identity()
-
-    # 查询数据库中当前用户
-    user = User.query.filter_by(id=current_user_id).first()
-
-    if not user:
-        return jsonify({"state": 0, "message": "User not found"}), 404
-
-    if user.u_status == 1:
-        return jsonify({"state": 0, "message": "User is not allowed to access this data"}), 403
-
-    # 构造用户信息字典
-    user_info = {
-        "username": user.username,
-        "gender": user.gender,
-        "intro": user.intro,
-        "avatar": user.avatar,
-        "email": user.email,
-        "register_time": user.create_at.strftime('%Y-%m-%d %H:%M:%S') if user.create_at else None,
-
-    }
-
-    return jsonify({"state": 1, "message": "Profile fetched successfully", "data": user_info}), 200
-
-@user_bp.route('/user/profile/<int:user_id>', methods=['GET'])
-def get_public_profile(user_id):
-
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({"message": "User not found"}), 404
-    if user.u_status == 1:
-         return jsonify({"message": "User not found"}), 404
-    user_info = {
-        "id": user.id, # 重要：这里必须包含用户ID
-        "username": user.username,
-        "intro": user.intro,
-        "avatar": user.avatar,
-        "email": user.email,
-        "register_time": user.create_at.strftime('%Y-%m-%d %H:%M:%S') if user.create_at else None,
-        "gender": user.gender
-    }
-    return jsonify(user_info), 200
-
 #用户退出登录
 @user_bp.route('/user/logout', methods=['POST'])
 @jwt_required()
@@ -410,3 +384,46 @@ def logout_user():
 
     return jsonify({"state": 1, "message": "Logout successful"}), 200
 
+@user_bp.route('/user/getProfile', methods=['GET'])
+@jwt_required()
+def get_profile():
+    current_user_id = get_jwt_identity()
+    user = User.query.filter_by(id=current_user_id).first()
+
+    if not user:
+        return jsonify({"state": 0, "message": "User not found"}), 404
+
+    if user.u_status == 1:
+        return jsonify({"state": 0, "message": "User is not allowed to access this data"}), 403
+
+    user_info = {
+        "id": user.id,  # <--- ADD THIS LINE
+        "username": user.username,
+        "gender": user.gender,
+        "intro": user.intro,
+        "avatar": user.avatar,
+        "email": user.email,
+        "phone": user.phone,
+        "register_time": user.create_at.strftime('%Y-%m-%d %H:%M:%S') if user.create_at else None,
+    }
+
+    return jsonify({"state": 1, "message": "Profile fetched successfully", "data": user_info}), 200
+
+@user_bp.route('/user/profile/<int:user_id>', methods=['GET'])
+def get_public_profile(user_id):
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    if user.u_status == 1:
+         return jsonify({"message": "User not found"}), 404
+    user_info = {
+        "id": user.id, # 重要：这里必须包含用户ID
+        "username": user.username,
+        "intro": user.intro,
+        "avatar": user.avatar,
+        "email": user.email,
+        "register_time": user.create_at.strftime('%Y-%m-%d %H:%M:%S') if user.create_at else None,
+        "gender": user.gender
+    }
+    return jsonify(user_info), 200
