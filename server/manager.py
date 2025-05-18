@@ -387,6 +387,10 @@ def update_user_permission():
 
     if not target_user:
         return jsonify({"state": 0, "message": "用户不存在"}), 404
+    
+    if target_user.u_status != 0:
+        return jsonify({"state": 0, "message": "用户已被封禁，无法修改权限"}), 400
+
 
     updated_permissions = {}
     valid_fields = ['is_publish', 'is_comment']

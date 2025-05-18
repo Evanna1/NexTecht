@@ -30,6 +30,40 @@ class User(db.Model):
     last_login_at = db.Column(db.DateTime)            # 最后登录时间
     is_online = db.Column(db.Boolean, default=False)  # 是否在线
 
+    def to_dict(self):
+        return {
+            "id": self.id,  # 用户ID，主键
+            "username": self.username,  # 用户名，唯一
+            "nickname": self.nickname,  # 昵称
+            "avatar": f"/static/{self.avatar}" if self.avatar else "' + profile.mng_avatar : '/mng_avatar.jpg'",
+            "gender": self.gender,  # 性别
+            "email": self.email,  # 邮箱，唯一
+            "phone": self.phone,  # 手机号，可为空
+            "create_at": self.create_at.isoformat() if self.create_at else None,  # 注册时间，格式化为字符串
+            "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,  # 最后登录时间，格式化为字符串
+            "is_online": self.is_online if hasattr(self, 'is_online') else False,  # 是否在线，默认为False
+            "u_status": self.u_status,  # 用户状态，0为正常，1为禁用
+            "is_publish": self.is_publish,  # 是否有发布权限，1为有，0为无
+            "is_comment": self.is_comment,  # 是否有评论权限，1为有，0为无
+            "article_count": len(self.articles) if hasattr(self, 'articles') else 0,  # 用户发表的文章数量
+            "comment_count": len(self.comments) if hasattr(self, 'comments') else 0,  # 用户发表的评论数量
+            "like_count": len(self.likes) if hasattr(self, 'likes') else 0,  # 用户点赞数量
+            "followers_count": self.followers.count() if hasattr(self, 'followers') else 0,  # 粉丝数量，即关注该用户的人数
+            "followings_count": self.followings.count() if hasattr(self, 'followings') else 0,  # 该用户关注的人数
+            #浏览记录
+            "browse_records": [
+                {
+                    "record_id": record.id,
+                    "article_id": record.article.id,
+                    "article_title": record.article.title,
+                    "browse_time": record.browse_time.isoformat()
+                }
+                for record in sorted(self.records, key=lambda r: r.browse_time, reverse=True)  # 最新优先
+            ] if hasattr(self, 'records') else []
+        }
+
+
+
     def set_password(self, password):
         """加密用户的密码并存储到 password_hash 字段中"""
         self.password_hash = generate_password_hash(password)  # 使用 werkzeug 的 generate_password_hash 函数加密密码
@@ -119,13 +153,18 @@ class Article(db.Model):
             'title': self.title,
             'content': self.content,
             'create_time': self.create_time.isoformat(),
+            'update_time': self.update_time.isoformat(),
             'author': self.user.username,
             'permission': self.permission,  # 新增权限位
             'status': self.status,  # 新增状态位
             'image_path': self.image_path,  # 新增图片路径
-            'tag': self.tag  # 新增分类标签
+            'tag': self.tag,  # 新增分类标签
+            'read_count': self.read_count,
+            'comments_count': len(self.comments) if hasattr(self, 'comments') else 0,  # 文章评论数量
+            'likes_count': len(self.likes) if hasattr(self, 'likes') else 0,  # 文章点赞数量
+            'favorites_count': len(self.favorites) if hasattr(self, 'favorites') else 0,  # 文章收藏数量
         }
-
+    
     def update_article(self, new_title=None, new_content=None,new_permission=None, new_status=None, new_image_path=None, new_tag=None):      #更新文章的标题和内容
         if new_title:
             self.title = new_title
@@ -264,14 +303,20 @@ class Alike(db.Model):
         return f'<Like User {self.user_id} on Article {self.article_id}>'
     
 
-class Follow(db.Model):
+class Follow(db.Model): 
     id = db.Column(db.Integer, primary_key=True)
     follower_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  
     followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)  # 关注的时间戳
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)  # 关注时间戳
+
+    # 关注者（发起关注的用户）
+    follower = db.relationship('User', foreign_keys=[follower_id], backref=db.backref('followings', lazy='dynamic'))
+    # 被关注者（被关注的用户）
+    followed = db.relationship('User', foreign_keys=[followed_id], backref=db.backref('followers', lazy='dynamic'))
 
     def __repr__(self):
         return f'<Follow follower: {self.follower_id}, followed: {self.followed_id}>'
+
 
 class UserBrowseRecord(db.Model):
     __tablename__ = 'user_browse_record'
@@ -285,3 +330,46 @@ class UserBrowseRecord(db.Model):
 
     def __repr__(self):
         return f'<BrowseRecord User {self.user_id} viewed Article {self.article_id} at {self.browse_time.isoformat()}>'
+    
+#评论点赞类
+class CommentLike(db.Model):
+    __tablename__ = 'comment_like'  # 指定表名
+
+    id = db.Column(db.Integer, primary_key=True)  # 自增的主键，点赞记录 ID
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 点赞用户的 ID，外键
+    user = db.relationship('User', backref=db.backref('comment_likes', lazy=True))  # 与用户模型的关联
+    comment_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=False)  # 被点赞的评论 ID，外键
+    comment = db.relationship('Comment', backref=db.backref('likes', lazy=True))  # 与评论模型的关联
+    create_time = db.Column(db.DateTime, default=datetime.utcnow)  # 点赞时间，默认为当前时间
+
+    @staticmethod
+    def get_comment_likes_users(comment_id):
+        """获取某个评论的所有点赞用户"""
+        likes = CommentLike.query.filter_by(comment_id=comment_id).all()
+        users = [
+            {
+                "id": like.user.id,
+                "username": like.user.username,
+                "nickname": like.user.nickname,
+                "avatar": like.user.avatar
+            }
+            for like in likes
+        ]
+        return users
+
+    def __repr__(self):
+        return f'<CommentLike {self.id} by User {self.user_id} on Comment {self.comment_id}>'
+
+#文章收藏类
+class ArticleFavorite(db.Model):
+    __tablename__ = 'article_favorite'  # 指定表名
+
+    id = db.Column(db.Integer, primary_key=True)  # 自增的主键，收藏记录 ID
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 收藏用户的 ID，外键
+    user = db.relationship('User', backref=db.backref('article_favorites', lazy=True))  # 与用户模型的关联
+    article_id = db.Column(db.Integer, db.ForeignKey('article.id'), nullable=False)  # 被收藏的文章 ID，外键
+    article = db.relationship('Article', backref=db.backref('favorites', lazy=True))  # 与文章模型的关联
+    create_time = db.Column(db.DateTime, default=datetime.utcnow)  # 收藏时间，默认为当前时间
+
+    def __repr__(self):
+        return f'<ArticleFavorite {self.id} by User {self.user_id} on Article {self.article_id}>'
