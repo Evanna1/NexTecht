@@ -153,17 +153,16 @@ class Article(db.Model):
             'id': self.id,
             'title': self.title,
             'content': self.content,
-            'create_time': self.create_time.isoformat(),
-            'update_time': self.update_time.isoformat(),
-            'author': self.user.username,
-            'permission': self.permission,  # 新增权限位
-            'status': self.status,  # 新增状态位
-            'image_path': self.image_path,  # 新增图片路径
-            'tag': self.tag,  # 新增分类标签
+            'create_time': self.create_time.isoformat() if self.create_time else None,  # Handle potential None
+            'update_time': self.update_time.isoformat() if self.update_time else None,
+            'author': self.user.username if self.user else 'Unknown',  # Handle potential missing user
+            'permission': self.permission,
+            'status': self.status,
             'read_count': self.read_count,
-            'comments_count': len(self.comments) if hasattr(self, 'comments') else 0,  # 文章评论数量
-            'likes_count': len(self.likes) if hasattr(self, 'likes') else 0,  # 文章点赞数量
-            'favorites_count': len(self.favorites) if hasattr(self, 'favorites') else 0,  # 文章收藏数量
+            'image_path': self.image_path,
+            'tag': self.tag
+            # Future: Add 'like_count': self.like_count if hasattr(self, 'like_count') else 0,
+            # Future: Add 'favorite_count': self.favorite_count if hasattr(self, 'favorite_count') else 0,
         }
 
     def update_article(self, new_title=None, new_content=None, new_permission=None, new_status=None,
@@ -240,9 +239,7 @@ class Comment(db.Model):
             'is_approved': self.is_approved,
             'like_count': self.like_count,
             'reply_count': self.reply_count,
-            'comment_type': self.comment_type,
             'depth': self.depth,
-            'ip_address': self.ip_address,
             'user': {
                 'id': self.user.id,
                 'username': self.user.username,
@@ -311,16 +308,10 @@ class Follow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     follower_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     followed_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)  # 关注时间戳
-
-    # 关注者（发起关注的用户）
-    follower = db.relationship('User', foreign_keys=[follower_id], backref=db.backref('followings', lazy='dynamic'))
-    # 被关注者（被关注的用户）
-    followed = db.relationship('User', foreign_keys=[followed_id], backref=db.backref('followers', lazy='dynamic'))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)  # 关注的时间戳
 
     def __repr__(self):
         return f'<Follow follower: {self.follower_id}, followed: {self.followed_id}>'
-
 
 class UserBrowseRecord(db.Model):
     __tablename__ = 'user_browse_record'
@@ -338,29 +329,16 @@ class UserBrowseRecord(db.Model):
 
 # 评论点赞类
 class CommentLike(db.Model):
-    __tablename__ = 'comment_like'  # 指定表名
+    __tablename__ = 'comment_like'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    comment_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    id = db.Column(db.Integer, primary_key=True)  # 自增的主键，点赞记录 ID
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 点赞用户的 ID，外键
-    user = db.relationship('User', backref=db.backref('comment_likes', lazy=True))  # 与用户模型的关联
-    comment_id = db.Column(db.Integer, db.ForeignKey('comment.id'), nullable=False)  # 被点赞的评论 ID，外键
-    comment = db.relationship('Comment', backref=db.backref('likes', lazy=True))  # 与评论模型的关联
-    create_time = db.Column(db.DateTime, default=datetime.utcnow)  # 点赞时间，默认为当前时间
+    __table_args__ = (db.UniqueConstraint('user_id', 'comment_id', name='_user_comment_uc'),)
 
-    @staticmethod
-    def get_comment_likes_users(comment_id):
-        """获取某个评论的所有点赞用户"""
-        likes = CommentLike.query.filter_by(comment_id=comment_id).all()
-        users = [
-            {
-                "id": like.user.id,
-                "username": like.user.username,
-                "nickname": like.user.nickname,
-                "avatar": like.user.avatar
-            }
-            for like in likes
-        ]
-        return users
+    user = db.relationship('User', backref=db.backref('comment_likes', lazy='dynamic'))
+    comment = db.relationship('Comment', backref=db.backref('comment_likes', lazy='dynamic'))
 
     def __repr__(self):
         return f'<CommentLike {self.id} by User {self.user_id} on Comment {self.comment_id}>'
