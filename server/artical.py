@@ -129,7 +129,7 @@ def soft_delete_article(article_id):
         return jsonify({"error": f"软删除文章时出错: {str(e)}"}), 500
 
 #上传图片
-@artical_bp.route('/article/upload/image', methods=['POST'])
+@artical_bp.route('/upload/image', methods=['POST'])
 @jwt_required()  # 需要验证 JWT
 def upload_image():
     # 获取上传的图片文件
@@ -159,10 +159,7 @@ def upload_image():
 @jwt_required()
 def create_article():
     current_user_id = get_jwt_identity()
-
-    # data = request.form
-    data = request.get_json()
-
+    data = request.form
     title = data.get('title')
     content = data.get('content')
     image_path = data.get('image_path')  # 如果你是用 URL 的话，否则从文件字段拿
