@@ -62,87 +62,32 @@ def unfavorite_article(article_id):
         "is_favorited": False # 返回当前用户未收藏状态
     }), 200
 
-# 获取某个用户的所有收藏
-@articalfavo_bp.route('/user/favorites/<int:user_id>', methods=['GET'])
-@jwt_required()  # 使用 JWT 要求用户登录
-def get_user_favorites(user_id):
-    """
-    获取某个用户的收藏文章列表，包含文章内容和作者信息。
-    需要 JWT Token 进行认证，且只能获取当前认证用户的收藏。
-    """
-    try:
-        # 从 JWT 中获取当前用户的 ID
-        current_user_id = get_jwt_identity()
-        # 注意：get_jwt_identity() 返回的是在创建 token 时放入的 'sub' 的值，通常是字符串
-        # 如果你的 'sub' 存储的是用户 ID 的整数，这里需要转换为整数
-        # 如果你的 'sub' 存储的就是字符串形式的用户 ID，则与 user_id (int) 比较前需要转换类型
-        # 稳妥起见，假设 current_user_id 是字符串， user_id 是 int，进行类型转换比较
-        # current_user_id = int(current_user_id) # 如果get_jwt_identity返回的是字符串ID
+# 获取用户的所有收藏记录
+@articalfavo_bp.route('/favorite/user/records', methods=['GET'])
+@jwt_required()
+def get_user_favorites():
+    user_id = get_jwt_identity()  # 获取当前用户的 ID
+    favorites = ArticleFavorite.query.filter_by(user_id=user_id).all()
 
-        print(f"Attempting to fetch favorites for user_id: {user_id}")
-        print(f"Authenticated user ID from JWT: {current_user_id}")
+    # 提取点赞文章的详细信息
+    favorites_articles = []
+    for favorite in favorites:
+        article = favorite.article  # 获取文章对象（通过 Alike 的 relationship）
+        favorites_articles.append({
+            "article_id": article.id,
+            "title": article.title,
+            "content": article.content,
+            "create_time": article.create_time,
+            "author_nickname": article.user.nickname,
+            "author_avatar": article.user.avatar,
+            "like_time": favorite.create_time
+        })
 
-
-        # 检查是否是当前认证用户在请求自己的收藏列表
-        # 这里的比较取决于你的 get_jwt_identity() 返回的类型和 user_id 的类型
-        # 假设 user_id 来自 URL 是 int， get_jwt_identity() 返回的是字符串
-        if str(user_id) != current_user_id:
-             print(f"Unauthorized attempt to access user {user_id}'s favorites by user {current_user_id}")
-             return jsonify({"state": 0, "message": "Unauthorized"}), 403
-
-        # 验证请求的用户是否存在（可选，但推荐）
-        user = User.query.get(user_id)
-        if not user:
-             print(f"User with ID {user_id} not found.")
-             return jsonify({"state": 0, "message": "User not found"}), 404
-
-
-        # 获取用户的所有收藏记录
-        # 使用 .all() 获取所有 ArticleFavorite 对象
-        favorites = ArticleFavorite.query.filter_by(user_id=user_id).all()
-
-        print(f"Found {len(favorites)} favorite records for user {user_id}")
-
-        # 构建收藏文章的详细信息列表
-        favorite_articles_details = []
-        for favorite in favorites:
-            # 通过关系访问到收藏的文章对象
-            article = favorite.article
-            # 确保文章存在（理论上收藏记录应该对应存在的文章）
-            if article:
-                # 通过文章对象访问到作者用户对象
-                author = article.user
-                # 确保作者存在
-                if author:
-                     print(f"Processing favorited article ID: {article.id}, Title: {article.title}")
-                     favorite_articles_details.append({
-                         "id": article.id, # 文章 ID
-                         "title": article.title, # 文章标题
-                         "content": article.content, # **新增：文章内容**
-                         "article_create_time": article.create_time.isoformat() if article.create_time else None, # **新增：文章创建时间**
-                         "author_id": author.id, # **新增：作者 ID**
-                         "author_nickname": author.nickname, # **新增：作者昵称**
-                         "author_avatar": author.avatar, # **新增：作者头像**
-                         "favorite_time": favorite.create_time.isoformat() if favorite.create_time else None # **新增：收藏时间** (保留原有的创建时间，更名为 favorite_time 以免混淆)
-                     })
-                else:
-                     print(f"Warning: Author not found for article ID {article.id} favorited by user {user_id}")
-            else:
-                 print(f"Warning: Article not found for favorite record ID {favorite.id} by user {user_id}")
-
-
-        # 返回成功响应，包含详细的收藏文章信息
-        return jsonify({
-            "state": 1,
-            "message": "Favorites retrieved successfully",
-            "favorites": favorite_articles_details # 返回包含详细信息的列表
-        }), 200
-
-    except Exception as e:
-        # 记录详细错误信息
-        print(f"An error occurred while fetching user favorites: {e}", exc_info=True)
-        # 可以在这里进行 db.session.rollback() 如果在 try 块中执行了任何数据库写操作 (虽然这个接口是 GET)
-        return jsonify({"state": 0, "message": "服务器内部错误", "error": str(e)}), 500
+    return jsonify({
+        "state": 1,
+        "message": "User like records fetched successfully",
+        "data": favorites_articles
+    }), 200
 
 #获取某个文章的收藏数
 @articalfavo_bp.route('/article/favorites/count/<int:article_id>', methods=['GET'])
