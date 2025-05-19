@@ -244,5 +244,23 @@ def get_user_follow_status(user_id):
         "is_mutual": is_mutual
     }), 200
 
+#获取关注用户的所有文章
+@follow_bp.route('/following/articles', methods=['GET'])
+@jwt_required()
+def get_following_articles():
+    current_user_id = get_jwt_identity()  # 获取当前登录用户ID
 
+    # 查询当前用户关注的所有用户的ID
+    followed_users = Follow.query.filter_by(follower_id=current_user_id).all()
+    followed_user_ids = [follow.followed_id for follow in followed_users]
+
+    # 查询这些用户发布的所有文章
+    articles = Article.query.filter(Article.user_id.in_(followed_user_ids)).order_by(Article.create_time.desc()).all()
+
+    # 构造返回结果
+    articles_data = []
+    for article in articles:
+        articles_data.append(article.to_dict())  # 使用 Article 类的 to_dict 方法
+
+    return jsonify({"state": 1, "message": "Following articles", "articles": articles_data}), 200
 

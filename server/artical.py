@@ -14,6 +14,7 @@ import random
 import logging
 import requests
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func, and_
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 artical_bp = Blueprint('artical', __name__)
@@ -284,28 +285,55 @@ def get_article_content(article_id):
 
 
 
-# 获取自己的历史浏览记录（用户专用）
 @artical_bp.route('/article/browses', methods=['GET'])
 @jwt_required()
 def get_user_browses():
     current_user_id = get_jwt_identity()
     user_id = int(current_user_id)
 
-    records = UserBrowseRecord.query.filter_by(user_id=user_id).order_by(UserBrowseRecord.browse_time.desc()).all()
+    # 子查询：查出用户每篇文章浏览的最新时间
+    subquery = (
+        db.session.query(
+            UserBrowseRecord.article_id,
+            func.max(UserBrowseRecord.browse_time).label("latest_browse_time")
+        )
+        .filter(UserBrowseRecord.user_id == user_id)
+        .group_by(UserBrowseRecord.article_id)
+        .subquery()
+    )
+
+    # 主查询：根据子查询结果获取最新的记录
+    records = (
+        db.session.query(UserBrowseRecord)
+        .join(
+            subquery,
+            and_(
+                UserBrowseRecord.article_id == subquery.c.article_id,
+                UserBrowseRecord.browse_time == subquery.c.latest_browse_time
+            )
+        )
+        .order_by(UserBrowseRecord.browse_time.desc())
+        .all()
+    )
 
     result = [
         {
             "article_id": r.article.id,
             "title": r.article.title,
             "content": r.article.content,
+            "tag": r.article.tag,
             "browse_time": r.browse_time.isoformat()
         }
         for r in records
     ]
 
-    return jsonify({"state": 1, "message": "Browse records retrieved successfully", "browses": result})
+    return jsonify({
+        "state": 1,
+        "message": "Browse records retrieved successfully",
+        "browses": result
+    })
 
-# 推荐算法
+
 @artical_bp.route('/article/recommend', methods=['GET'])
 @jwt_required()
 def recommend_articles():
@@ -356,9 +384,9 @@ def recommend_articles():
     user_vector = tfidf_matrix[indices].mean(axis=0).A1
     sim_scores = cosine_similarity(tfidf_matrix, user_vector.reshape(1, -1)).flatten()
 
-    # # 排除已读文章
-    # for idx in indices:
-    #     sim_scores[idx] = -1
+    # 排除已读文章
+   # for idx in indices:
+    #    sim_scores[idx] = -1
 
     # 获取 Top-K 推荐索引
     top_indices = sim_scores.argsort()[::-1]
@@ -411,7 +439,7 @@ def recommend_articles():
 
     return jsonify({"state": 1, "message": "推荐文章列表", "recommendations": rec_list})
 
-# 热度算法
+
 #搜索算法
 @artical_bp.route('/article/search', methods=['GET'])
 def search_articles():
@@ -470,6 +498,8 @@ def search_articles():
     results.sort(key=lambda x: x['relevance'], reverse=True)
 
     return jsonify({"state": 1, "message": "搜索结果", "data": results})
+
+
 
 
 @artical_bp.route('/article/hot', methods=['GET'])

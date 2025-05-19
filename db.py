@@ -168,6 +168,23 @@ class Article(db.Model):
             'tag': self.tag,
         }
 
+    def mng_to_dict(self):  # 字典，方便转为json
+        return {
+            'id': self.id,
+            'title': self.title,
+            'content': self.content,
+            'create_time': self.create_time.isoformat(),
+            'author': self.user.username,
+            'permission': self.permission,  # 新增权限位
+            'status': self.status,  # 新增状态位
+            'image_path': self.image_path,  # 新增图片路径
+            'tag': self.tag,  # 新增分类标签
+            'read_count': self.read_count,
+            'comments_count': len(self.comments) if hasattr(self, 'comments') else 0,  # 文章评论数量
+            'likes_count': len(self.likes) if hasattr(self, 'likes') else 0,  # 文章点赞数量
+            'favorites_count': len(self.favorites) if hasattr(self, 'favorites') else 0,  # 文章收藏数量
+        }
+
     def update_article(self, new_title=None, new_content=None, new_permission=None, new_status=None,
                        new_image_path=None, new_tag=None):  # 更新文章的标题和内容
         if new_title:
