@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from __init__ import db
-from db import User, Manager, Article
+from db import User, Manager, Article,Follow, ArticleFavorite,Comment,Alike,UserBrowseRecord
 from datetime import datetime
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from collections import OrderedDict
@@ -432,3 +432,221 @@ def update_user_permission():
             "state": 0,
             "message": f"用户权限更新失败: {str(e)}"
         }), 500
+    
+# 管理员获取指定用户的粉丝列表，返回完整用户信息。
+@manager_bp.route('/manager/followers/<int:user_id>', methods=['GET'])
+@jwt_required()
+def get_user_followers(user_id):
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标用户是否存在
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"state": 0, "message": "目标用户不存在"}), 404
+
+    # 查找所有关注该用户的记录（即粉丝）
+    follower_relationships = Follow.query.filter_by(followed_id=user_id).all()
+
+    # 构造粉丝用户列表，调用每个用户的 to_dict()
+    followers_list = []
+    for rel in follower_relationships:
+        follower_user = User.query.get(rel.follower_id)
+        if follower_user:
+            followers_list.append(follower_user.to_dict())
+
+    return jsonify({
+        "state": 1,
+        "message": f"用户 {user_id} 的粉丝列表",
+        "followers": followers_list
+    }), 200
+
+# 管理员获取指定用户的关注列表，返回完整用户信息。
+@manager_bp.route('/manager/following/<int:user_id>', methods=['GET'])
+@jwt_required()
+def get_user_following(user_id):
+
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标用户是否存在
+    target_user = User.query.get(user_id)
+    if not target_user:
+        return jsonify({"state": 0, "message": "目标用户不存在"}), 404
+
+    # 查找该用户关注的所有人（即关注列表）
+    following_relationships = Follow.query.filter_by(follower_id=user_id).all()
+
+    following_users_list = []
+    for rel in following_relationships:
+        followed_user = User.query.get(rel.followed_id)
+        if followed_user:
+            following_users_list.append(followed_user.to_dict())
+
+    return jsonify({
+        "state": 1,
+        "message": f"用户 {user_id} 的关注列表",
+        "following": following_users_list
+    }), 200
+
+# 管理员获取指定文章的收藏列表，返回收藏该文章的用户信息。
+@manager_bp.route('/manager/favorites/<int:article_id>', methods=['GET'])
+@jwt_required()
+def get_article_favorites(article_id):
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标文章是否存在
+    target_article = Article.query.get(article_id)
+    if not target_article:
+        return jsonify({"state": 0, "message": "目标文章不存在"}), 404
+
+    # 查找收藏该文章的所有收藏记录
+    favorite_relationships = ArticleFavorite.query.filter_by(article_id=article_id).all()
+
+    # 获取收藏该文章的用户信息
+    favorite_users_list = []
+    for favorite in favorite_relationships:
+        user = User.query.get(favorite.user_id)
+        if user:
+            favorite_users_list.append(user.to_dict())
+
+    # 按收藏时间排序（可选）
+    favorite_users_list.sort(key=lambda x: x['create_at'], reverse=True)
+
+    return jsonify({
+        "state": 1,
+        "message": f"文章 {article_id} 的收藏列表",
+        "favorites_count": len(favorite_users_list),
+        "favorites": favorite_users_list
+    }), 200
+
+# 管理员查看特定文章的评论用户列表
+@manager_bp.route('/manager/article/<int:article_id>/comment-users', methods=['GET'])
+@jwt_required()
+def get_article_comment_users(article_id):
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标文章是否存在
+    target_article = Article.query.get(article_id)
+    if not target_article:
+        return jsonify({"state": 0, "message": "目标文章不存在"}), 404
+
+    # 查找该文章的所有评论
+    comments = Comment.query.filter_by(article_id=article_id).all()
+
+    # 获取评论用户的详细信息
+    comment_users = []
+    for comment in comments:
+        user = User.query.get(comment.user_id)
+        if user:
+            comment_users.append({
+                "user_info": user.to_dict(),
+                "comment_content": comment.content,
+                "comment_create_time": comment.create_time.isoformat(),
+                "comment_update_time": comment.update_time.isoformat() if comment.update_time else None,
+                "comment_id": comment.id
+            })
+
+    # 按评论时间排序（从新到旧）
+    comment_users.sort(key=lambda x: x["comment_create_time"], reverse=True)
+
+    return jsonify({
+        "state": 1,
+        "message": f"文章 {article_id} 的评论用户列表",
+        "article_title": target_article.title,
+        "comment_count": len(comment_users),
+        "comment_users": comment_users
+    }), 200
+
+
+# 管理员查看特定文章的点赞用户列表
+@manager_bp.route('/manager/article/<int:article_id>/like-users', methods=['GET'])
+@jwt_required()
+def get_article_like_users(article_id):
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标文章是否存在
+    target_article = Article.query.get(article_id)
+    if not target_article:
+        return jsonify({"state": 0, "message": "目标文章不存在"}), 404
+
+    # 查找该文章的所有点赞记录
+    likes = Alike.query.filter_by(article_id=article_id).all()
+
+    # 获取点赞用户的详细信息
+    like_users = []
+    for like in likes:
+        user = User.query.get(like.user_id)
+        if user:
+            like_users.append({
+                "user_info": user.to_dict(),
+                "like_create_time": like.create_time.isoformat()
+            })
+
+    # 按点赞时间排序（从新到旧）
+    like_users.sort(key=lambda x: x["like_create_time"], reverse=True)
+
+    return jsonify({
+        "state": 1,
+        "message": f"文章 {article_id} 的点赞用户列表",
+        "article_title": target_article.title,
+        "like_count": len(like_users),
+        "like_users": like_users
+    }), 200
+
+# 管理员查看特定文章的浏览者列表
+@manager_bp.route('/manager/article/<int:article_id>/browsers', methods=['GET'])
+@jwt_required()
+def get_article_browsers(article_id):
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标文章是否存在
+    target_article = Article.query.get(article_id)
+    if not target_article:
+        return jsonify({"state": 0, "message": "目标文章不存在"}), 404
+
+    # 查找该文章的所有浏览记录
+    browsers = UserBrowseRecord.query.filter_by(article_id=article_id).all()
+
+    # 获取浏览者的详细信息
+    browser_users = []
+    for record in browsers:
+        user = User.query.get(record.user_id)
+        if user:
+            browser_users.append({
+                "user_info": user.to_dict(),
+                "browse_time": record.browse_time.isoformat()
+            })
+
+    # 按浏览时间排序（从新到旧）
+    browser_users.sort(key=lambda x: x["browse_time"], reverse=True)
+
+    return jsonify({
+        "state": 1,
+        "message": f"文章 {article_id} 的浏览者列表",
+        "article_title": target_article.title,
+        "browse_count": len(browser_users),
+        "browser_users": browser_users
+    }), 200
