@@ -412,6 +412,66 @@ def recommend_articles():
     return jsonify({"state": 1, "message": "推荐文章列表", "recommendations": rec_list})
 
 # 热度算法
+#搜索算法
+@artical_bp.route('/article/search', methods=['GET'])
+def search_articles():
+    keyword = request.args.get('search', '')
+    if not keyword:
+        return jsonify({"state": 0, "message": "请输入搜索关键词"}), 400
+
+    # 1. 查询相关文章
+    # 可以根据标题、内容、作者、标签等进行模糊搜索
+    articles = Article.query.filter(
+        (Article.title.ilike(f'%{keyword}%')) |
+        (Article.content.ilike(f'%{keyword}%')) |
+        (Article.tag.ilike(f'%{keyword}%')) |
+        (Article.user.has(User.username.ilike(f'%{keyword}%'))) # 搜索作者用户名
+    ).all()
+
+    results = []
+    for article in articles:
+        results.append(OrderedDict([
+            ("id", article.id),
+            ("userId", article.user_id),
+            ("title", article.title),
+            ("content", article.content),
+            ("tags", article.tag.split(',') if article.tag else []),
+            ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
+            ("authorName", article.user.username if article.user else None),
+            ("createdAt", article.create_time.isoformat()),
+            ("views", article.read_count),
+            ("likes", len(getattr(article, 'likes', []))),
+            ("relevance", 1) # 初始相关性，后续可以根据更复杂的算法调整
+        ]))
+
+    if not results:
+        return jsonify({"state": 1, "message": "没有找到相关的文章", "data": []})
+
+    # 2. （可选）提升搜索结果的相关性排序
+    # 可以根据更复杂的算法对搜索结果进行排序，例如：
+    #   - TF-IDF 相似度：将搜索关键词与文章内容进行比较，计算相似度。
+    #   - 考虑文章的流行度：例如，根据阅读量、点赞数等进行加权。
+    #   - 考虑作者的权威性：如果搜索结果包含知名作者的文章，可以适当提升其排名。
+    #   - 时间因素：可以优先展示最近发布的文章。
+
+    # 简单的基于标题和内容匹配的排序（可以根据需求扩展）
+    def calculate_relevance(article_data):
+        score = 0
+        if keyword.lower() in article_data['title'].lower():
+            score += 2
+        if keyword.lower() in article_data['content'].lower():
+            score += 1
+        # 可以添加基于标签、作者等匹配的评分
+        return score
+
+    for result in results:
+        result['relevance'] = calculate_relevance(result)
+
+    results.sort(key=lambda x: x['relevance'], reverse=True)
+
+    return jsonify({"state": 1, "message": "搜索结果", "data": results})
+
+
 @artical_bp.route('/article/hot', methods=['GET'])
 def hot_articles():
     top_k = 10  # 返回前10个热度最高的文章
@@ -434,20 +494,26 @@ def hot_articles():
     articles_with_scores.sort(key=lambda x: x[1], reverse=True)
 
     # 取 top_k
-    top_articles = articles_with_scores[:top_k]
+    top_articles_with_scores = articles_with_scores[:top_k]
 
-    # 构造返回结果
-    result = [
-        OrderedDict([
-            ("article_id", art.id),
+    # 构造返回结果，包含文章详细信息
+    result = []
+    for art, score in top_articles_with_scores:
+        result.append(OrderedDict([
+            ("id", art.id),
+            ("userId", art.user_id),
             ("title", art.title),
-            ("hot_score", score)
-        ])
-        for art, score in top_articles
-    ]
+            ("content", art.content),
+            ("tags", art.tag.split(',') if art.tag else []),
+            ("user", {"id": art.user.id, "username": art.user.username} if art.user else None),
+            ("authorName", art.user.username if art.user else None),
+            ("createdAt", art.create_time.isoformat()),
+            ("views", art.read_count),
+            ("likes", len(getattr(art, 'likes', []))),
+            ("hot_score", score) # 添加热度分数
+        ]))
 
     return jsonify({"state": 1, "message": "热门文章列表", "articles": result}), 200
-
 # 定义获取指定用户文章列表的路由
 @artical_bp.route('/article/list/by-user/<int:user_id>', methods=['GET'])
 # 使用 optional=True，表示这个接口可以带 JWT 访问，也可以不带

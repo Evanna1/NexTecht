@@ -6,6 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="80535f14-d954-470d-98f9-9bd1f2401f0d" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/artical.py" beforeDir="false" afterPath="$PROJECT_DIR$/server/artical.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
