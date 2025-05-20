@@ -234,13 +234,13 @@ def update_article_by_user(article_id):
     data = request.json
     new_title = data.get('title')
     new_content = data.get('content')
-    new_image_path = data.get('image_path')  # 获取新的图片路径
     new_tag = data.get('tag')  # 获取新的分类标签
-    if not new_title and not new_content and new_tag is None and new_image_path is None:
+    new_permission = data.get('permission')
+    if not new_title and not new_content and new_tag is None and new_permission is None:
         return jsonify({"error": "至少需要提供新的标题、内容、分类标签或图片"}), 400
 
     # 更新文章
-    article.update_article(new_title, new_content, new_tag=new_tag, new_image_path=new_image_path)
+    article.update_article(new_title, new_content, new_permission, new_tag=new_tag,)
 
     return jsonify(article.to_dict())
 
@@ -322,7 +322,9 @@ def get_user_browses():
             "title": r.article.title,
             "content": r.article.content,
             "tag": r.article.tag,
-            "browse_time": r.browse_time.isoformat()
+            "browse_time": r.browse_time.isoformat(),
+            "avatar": r.article.user.avatar,
+            "nickname": r.article.user.nickname
         }
         for r in records
     ]
@@ -361,7 +363,7 @@ def recommend_articles():
                 ("userId", article.user_id),
                 ("title", article.title),
                 ("content", article.content),
-                ("tags", article.tag.split(',') if article.tag else []), # 直接使用 article.tag 并分割
+                ("tags", article.tag.split('，') if article.tag else []), # 直接使用 article.tag 并分割
                 ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
                 ("authorName", article.user.username if article.user else None), # 使用 user.username
                 ("createdAt", article.create_time.isoformat()),
@@ -402,7 +404,7 @@ def recommend_articles():
             ("userId", article.user_id),
             ("title", article.title),
             ("content", article.content),
-            ("tags", article.tag.split(',') if article.tag else []), # 直接使用 article.tag 并分割
+            ("tags", article.tag.split('，') if article.tag else []), # 直接使用 article.tag 并分割
             ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
             ("authorName", article.user.username if article.user else None), # 使用 user.username
             ("createdAt", article.create_time.isoformat()),
@@ -425,7 +427,7 @@ def recommend_articles():
                 ("userId", article.user_id),
                 ("title", article.title),
                 ("content", article.content),
-                ("tags", article.tag.split(',') if article.tag else []), # 直接使用 article.tag 并分割
+                ("tags", article.tag.split('，') if article.tag else []), # 直接使用 article.tag 并分割
                 ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
                 ("authorName", article.user.username if article.user else None), # 使用 user.username
                 ("createdAt", article.create_time.isoformat()),
@@ -463,7 +465,7 @@ def search_articles():
             ("userId", article.user_id),
             ("title", article.title),
             ("content", article.content),
-            ("tags", article.tag.split(',') if article.tag else []),
+            ("tags", article.tag.split('，') if article.tag else []),
             ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
             ("authorName", article.user.username if article.user else None),
             ("createdAt", article.create_time.isoformat()),
@@ -499,9 +501,6 @@ def search_articles():
 
     return jsonify({"state": 1, "message": "搜索结果", "data": results})
 
-
-
-
 @artical_bp.route('/article/hot', methods=['GET'])
 def hot_articles():
     top_k = 10  # 返回前10个热度最高的文章
@@ -534,7 +533,7 @@ def hot_articles():
             ("userId", art.user_id),
             ("title", art.title),
             ("content", art.content),
-            ("tags", art.tag.split(',') if art.tag else []),
+            ("tags", art.tag.split('，') if art.tag else []),
             ("user", {"id": art.user.id, "username": art.user.username} if art.user else None),
             ("authorName", art.user.username if art.user else None),
             ("createdAt", art.create_time.isoformat()),

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from __init__ import db
-from db import User
+from db import User, Alike, ArticleFavorite
 from tokenblock import TokenBlocklist
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
@@ -421,3 +421,25 @@ def get_public_profile(user_id):
         "gender": user.gender
     }
     return jsonify(user_info), 200
+
+@user_bp.route('/user/like_count', methods=['GET'])
+@jwt_required()
+def get_like_count():
+    user_id = get_jwt_identity()
+    count = Alike.count_user_likes(user_id)
+    return jsonify({
+        "state": 1,
+        "message": "Like count retrieved successfully",
+        "like_count": count
+    })
+
+@user_bp.route('/user/collect_count', methods=['GET'])
+@jwt_required()
+def get_favorite_count():
+    user_id = get_jwt_identity()
+    count = ArticleFavorite.get_favorite_count(user_id)
+    return jsonify({
+        "state": 1,
+        "message": "Favorite_count retrieved successfully",
+        "favorite_count": count
+    })

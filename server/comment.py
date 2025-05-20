@@ -5,6 +5,7 @@ from db import User, Article, Manager, Comment, CommentLike
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 import functools
 from collections import OrderedDict
+from sqlalchemy import or_
 
 comment_bp = Blueprint('comment', __name__)
 
@@ -116,37 +117,6 @@ def delete_comment(comment_id):
     # 返回成功响应
     return jsonify({"state": 1, "message": "Comment deleted successfully"})
 
-'''
-#用户点赞评论   (这部分要等点赞表写完)
-@comment_bp.route('/comment/like/<int:comment_id>', methods=['POST'])
-@jwt_required()  # 使用 JWT 要求用户登录
-def like_comment(comment_id):
-    # 获取评论对象，如果评论不存在则返回 404 错误
-    comment = Comment.query.get_or_404(comment_id)
-
-    # 从 JWT 中获取当前用户的 ID
-    user_id = get_jwt_identity()
-    user_id = int(user_id)  # 确保 user_id 是整数类型
-
-    # 检查用户是否已经点赞过该评论
-    if comment in current_user.liked_comments:
-        return jsonify({"state": 0, "message": "You have already liked this comment"}), 400
-
-    # 用户点赞评论
-    comment.like_count += 1
-    db.session.add(comment)
-
-    # 将点赞记录添加到用户点赞列表（假设有一个中间表记录用户点赞的评论）
-    current_user.liked_comments.append(comment)
-    db.session.add(current_user)
-
-    # 提交数据库会话
-    db.session.commit()
-
-    # 返回成功响应
-    return jsonify({"state": 1, "message": "Comment liked successfully"})
-'''
-
 #用户举报评论(目前只有置位举报，没有记录其他信息)
 @comment_bp.route('/comment/report/<int:comment_id>', methods=['POST'])
 @jwt_required()
@@ -189,48 +159,6 @@ def get_user_comments():
     # 返回成功响应
     return jsonify({"state": 1, "message": "User comments", "comments": comments_list})
 
-'''
-#用户获取自己点赞的所有评论
-@comment_bp.route('/user/<int:user_id>/liked_comments', methods=['GET'])
-@login_required
-def get_user_liked_comments(user_id):
-    if user_id != current_user.id:
-        return jsonify({"state": 0, "message": "Unauthorized"}), 403
-
-    # 假设有一个中间表来记录用户点赞的评论
-    liked_comments = current_user.liked_comments.all()
-    comments_list = [
-        OrderedDict([
-            ("id", comment.id),
-            ("content", comment.content),
-            ("article_id", comment.article_id),
-            ("create_time", comment.create_time.isoformat() if comment.create_time else None),
-            ("update_time", comment.update_time.isoformat() if comment.update_time else None),
-            ("status", comment.status),
-            ("is_approved", comment.is_approved),
-            ("like_count", comment.like_count),
-            ("reply_count", comment.reply_count),
-            ("depth", comment.depth),
-            ("parent_id", comment.parent_id)
-        ])
-        for comment in liked_comments
-    ]
-
-    return jsonify({"state": 1, "message": "User liked comments", "comments": comments_list})
-
-#用户取消点赞评论
-@comment_bp.route('/comment/<int:comment_id>/unlike', methods=['POST'])
-@login_required
-def unlike_comment(comment_id):
-    comment = Comment.query.get_or_404(comment_id)
-    if comment.like_count > 0:
-        comment.like_count -= 1
-        db.session.commit()
-        return jsonify({"state": 1, "message": "Comment unliked successfully"})
-    else:
-        return jsonify({"state": 0, "message": "Comment is not liked"}), 400
-'''
-
 #用户获取自己所有被举报的评论
 
 @comment_bp.route('/comment/reported_comments', methods=['GET'])
@@ -266,6 +194,7 @@ def get_user_reported_comments():
 
 
 # 获取特定文章的顶级评论列表（分页）
+# 获取特定文章的顶级评论列表（分页）
 @comment_bp.route('/article/<int:article_id>/comments', methods=['GET'])
 # 使用 verify_jwt_in_request 让接口可选登录，如果登录则获取 user_id 用于判断 is_liked
 def get_article_comments(article_id):
@@ -282,9 +211,11 @@ def get_article_comments(article_id):
     per_page = request.args.get('per_page', 10, type=int) # 每页10条评论
 
     # 查询属于该文章的顶级评论 (depth = 1)，过滤状态为正常 (status=0)，按创建时间倒序排列
-    pagination = Comment.query.filter_by(article_id=article_id, depth=1, status=0)\
-                               .order_by(Comment.create_time.desc())\
-                               .paginate(page=page, per_page=per_page, error_out=False)
+    pagination = Comment.query.filter(
+        Comment.article_id == article_id,
+        Comment.depth == 1,
+        or_(Comment.status == 0, Comment.status == 3)  # <-- Here's the change
+    ).order_by(Comment.create_time.desc()).paginate(page=page, per_page=per_page, error_out=False)
 
     comments = pagination.items
     total_pages = pagination.pages
@@ -328,9 +259,13 @@ def get_comment_replies(parent_id):
 
     # 查询属于该父评论的子评论 (depth = 2)，过滤状态为正常 (status=0)，按创建时间正序排列
     # 通常子评论数量不会特别多，可以一次性获取
-    replies = Comment.query.filter_by(parent_id=parent_id, depth=2, status=0)\
-                           .order_by(Comment.create_time.asc())\
-                           .all()
+    from sqlalchemy import or_
+
+    replies = Comment.query.filter(
+        Comment.parent_id == parent_id,
+        Comment.depth == 2,
+        or_(Comment.status == 0, Comment.status == 3)  # <-- 这里做了修改
+    ).order_by(Comment.create_time.asc()).all()
 
     # 获取子评论的 ID 列表
     reply_ids = [reply.id for reply in replies]
@@ -351,6 +286,3 @@ def get_comment_replies(parent_id):
         "message": "Replies fetched successfully",
         "replies": replies_list
     })
-
-
-

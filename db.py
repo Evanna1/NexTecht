@@ -9,6 +9,7 @@ import string
 from flask_mail import Message, Mail
 from twilio.rest import Client
 from flask import current_app
+from sqlalchemy import func
 
 mail = Mail()
 
@@ -320,6 +321,11 @@ class Alike(db.Model):
         """获取某篇文章所有点赞的用户"""
         return cls.query.filter_by(article_id=article_id).all()
 
+    @classmethod
+    def count_user_likes(cls, user_id):
+        """获取某用户点赞的文章数量"""
+        return cls.query.filter_by(user_id=user_id).count()
+
     def __repr__(self):
         return f'<Like User {self.user_id} on Article {self.article_id}>'
 
@@ -380,5 +386,9 @@ class ArticleFavorite(db.Model):
     article = db.relationship('Article', backref=db.backref('favorites', lazy=True))  # 与文章模型的关联
     create_time = db.Column(db.DateTime, default=datetime.utcnow)  # 收藏时间，默认为当前时间
 
+    def get_favorite_count(user_id):
+        count = db.session.query(func.count(ArticleFavorite.id)) \
+            .filter(ArticleFavorite.user_id == user_id).scalar()
+        return count
     def __repr__(self):
         return f'<ArticleFavorite {self.id} by User {self.user_id} on Article {self.article_id}>'

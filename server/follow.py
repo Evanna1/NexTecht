@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
-from db import User, Follow 
+from db import User, Follow, Article
 
 follow_bp = Blueprint('follow_api', __name__)
 

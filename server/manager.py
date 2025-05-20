@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from __init__ import db
-from db import User, Manager, Article,Follow, ArticleFavorite,Comment,Alike,UserBrowseRecord
+from db import User, Manager, Article, Follow, ArticleFavorite, Comment, Alike, UserBrowseRecord
 from datetime import datetime
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from collections import OrderedDict
