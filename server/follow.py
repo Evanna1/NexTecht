@@ -254,8 +254,12 @@ def get_following_articles():
     followed_users = Follow.query.filter_by(follower_id=current_user_id).all()
     followed_user_ids = [follow.followed_id for follow in followed_users]
 
-    # 查询这些用户发布的所有文章
-    articles = Article.query.filter(Article.user_id.in_(followed_user_ids)).order_by(Article.create_time.desc()).all()
+    # 查询这些用户发布的所有文章，并排除被屏蔽的文章（permission != 1）
+    articles = Article.query.filter(
+        Article.user_id.in_(followed_user_ids),
+        Article.permission != 1 , # 排除被屏蔽的文章
+        Article.status != 1  # 排除已删除的文章
+    ).order_by(Article.create_time.desc()).all()
 
     # 构造返回结果
     articles_data = []

@@ -49,7 +49,7 @@ def get_browses(user_id):
 @admin_required
 def get_all_articles():
     articles = Article.query.all()
-    articles_list = [article.to_dict() for article in articles]
+    articles_list = [article.mng_to_dict() for article in articles]
     return jsonify({
         "state": 1,
         "message": "List of articles",
@@ -349,6 +349,8 @@ def recommend_articles():
     article_texts = []
     article_ids = []
     for article in articles:
+        if article.permission == 1 or article.status == 1:  # 如果文章被屏蔽，则跳过
+            continue
         article_data.append(article)
         article_texts.append(article.title + " " + article.content)
         article_ids.append(article.id)
@@ -363,12 +365,12 @@ def recommend_articles():
                 ("userId", article.user_id),
                 ("title", article.title),
                 ("content", article.content),
-                ("tags", article.tag.split('，') if article.tag else []), # 直接使用 article.tag 并分割
+                ("tags", article.tag.split('，') if article.tag else []),  # 直接使用 article.tag 并分割
                 ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
-                ("authorName", article.user.username if article.user else None), # 使用 user.username
+                ("authorName", article.user.username if article.user else None),  # 使用 user.username
                 ("createdAt", article.create_time.isoformat()),
                 ("views", article.read_count),
-                ("likes", len(getattr(article, 'likes', []))), # 假设有点赞关系
+                ("likes", len(getattr(article, 'likes', []))),  # 假设有点赞关系
                 ("score", 0)  # 无相似度，打分为 0
             ]))
             count += 1
@@ -387,7 +389,7 @@ def recommend_articles():
     sim_scores = cosine_similarity(tfidf_matrix, user_vector.reshape(1, -1)).flatten()
 
     # 排除已读文章
-   # for idx in indices:
+    # for idx in indices:
     #    sim_scores[idx] = -1
 
     # 获取 Top-K 推荐索引
@@ -399,17 +401,19 @@ def recommend_articles():
         if sim_scores[i] <= 0:
             continue
         article = article_data[i]
+        if article.permission == 1:  # 如果文章被屏蔽，则跳过
+            continue
         rec_list.append(OrderedDict([
             ("article_id", article.id),
             ("userId", article.user_id),
             ("title", article.title),
             ("content", article.content),
-            ("tags", article.tag.split('，') if article.tag else []), # 直接使用 article.tag 并分割
+            ("tags", article.tag.split('，') if article.tag else []),  # 直接使用 article.tag 并分割
             ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
-            ("authorName", article.user.username if article.user else None), # 使用 user.username
+            ("authorName", article.user.username if article.user else None),  # 使用 user.username
             ("createdAt", article.create_time.isoformat()),
             ("views", article.read_count),
-            ("likes", len(getattr(article, 'likes', []))), # 假设有点赞关系
+            ("likes", len(getattr(article, 'likes', []))),  # 假设有点赞关系
             ("score", round(sim_scores[i], 4))
         ]))
         used_ids.add(article_ids[i])
@@ -422,17 +426,19 @@ def recommend_articles():
         remaining = [a for a in article_data if a.id not in used_ids]
         random.shuffle(remaining)  # 或可按创建时间倒序等方式排序
         for article in remaining:
+            if article.permission == 1 or article.status == 1:  # 如果文章被屏蔽，则跳过
+                continue
             rec_list.append(OrderedDict([
                 ("article_id", article.id),
                 ("userId", article.user_id),
                 ("title", article.title),
                 ("content", article.content),
-                ("tags", article.tag.split('，') if article.tag else []), # 直接使用 article.tag 并分割
+                ("tags", article.tag.split('，') if article.tag else []),  # 直接使用 article.tag 并分割
                 ("user", {"id": article.user.id, "username": article.user.username} if article.user else None),
-                ("authorName", article.user.username if article.user else None), # 使用 user.username
+                ("authorName", article.user.username if article.user else None),  # 使用 user.username
                 ("createdAt", article.create_time.isoformat()),
                 ("views", article.read_count),
-                ("likes", len(getattr(article, 'likes', []))), # 假设有点赞关系
+                ("likes", len(getattr(article, 'likes', []))),  # 假设有点赞关系
                 ("score", 0)  # 无相似度，打分为 0
             ]))
             count += 1
@@ -442,7 +448,7 @@ def recommend_articles():
     return jsonify({"state": 1, "message": "推荐文章列表", "recommendations": rec_list})
 
 
-#搜索算法
+
 @artical_bp.route('/article/search', methods=['GET'])
 def search_articles():
     keyword = request.args.get('search', '')
@@ -451,12 +457,13 @@ def search_articles():
 
     # 1. 查询相关文章
     # 可以根据标题、内容、作者、标签等进行模糊搜索
+    # 增加了对 permission 字段的判断，屏蔽的文章不会被搜索到
     articles = Article.query.filter(
         (Article.title.ilike(f'%{keyword}%')) |
         (Article.content.ilike(f'%{keyword}%')) |
         (Article.tag.ilike(f'%{keyword}%')) |
-        (Article.user.has(User.username.ilike(f'%{keyword}%'))) # 搜索作者用户名
-    ).all()
+        (Article.user.has(User.username.ilike(f'%{keyword}%')))  # 搜索作者用户名
+    ).filter(Article.permission != 1).filter(Article.status != 1).all()
 
     results = []
     for article in articles:
@@ -471,19 +478,13 @@ def search_articles():
             ("createdAt", article.create_time.isoformat()),
             ("views", article.read_count),
             ("likes", len(getattr(article, 'likes', []))),
-            ("relevance", 1) # 初始相关性，后续可以根据更复杂的算法调整
+            ("relevance", 1)  # 初始相关性，后续可以根据更复杂的算法调整
         ]))
 
     if not results:
         return jsonify({"state": 1, "message": "没有找到相关的文章", "data": []})
 
     # 2. （可选）提升搜索结果的相关性排序
-    # 可以根据更复杂的算法对搜索结果进行排序，例如：
-    #   - TF-IDF 相似度：将搜索关键词与文章内容进行比较，计算相似度。
-    #   - 考虑文章的流行度：例如，根据阅读量、点赞数等进行加权。
-    #   - 考虑作者的权威性：如果搜索结果包含知名作者的文章，可以适当提升其排名。
-    #   - 时间因素：可以优先展示最近发布的文章。
-
     # 简单的基于标题和内容匹配的排序（可以根据需求扩展）
     def calculate_relevance(article_data):
         score = 0
@@ -501,12 +502,15 @@ def search_articles():
 
     return jsonify({"state": 1, "message": "搜索结果", "data": results})
 
+
+
 @artical_bp.route('/article/hot', methods=['GET'])
 def hot_articles():
     top_k = 10  # 返回前10个热度最高的文章
     a, b = 3, 1  # 点赞权重3，阅读权重1
 
-    articles = Article.query.all()
+    # 查询所有未被屏蔽的文章
+    articles = Article.query.filter(Article.permission != 1, Article.status != 1).all()
     if not articles:
         return jsonify({"state": 0, "message": "暂无文章数据"}), 200
 
@@ -539,7 +543,7 @@ def hot_articles():
             ("createdAt", art.create_time.isoformat()),
             ("views", art.read_count),
             ("likes", len(getattr(art, 'likes', []))),
-            ("hot_score", score) # 添加热度分数
+            ("hot_score", score)  # 添加热度分数
         ]))
 
     return jsonify({"state": 1, "message": "热门文章列表", "articles": result}), 200

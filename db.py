@@ -41,6 +41,7 @@ class User(db.Model):
             "avatar": f"/static/{self.avatar}" if self.avatar else "' + profile.mng_avatar : '/mng_avatar.jpg'",
             "gender": self.gender,  # 性别
             "email": self.email,  # 邮箱，唯一
+            "intro": self.intro,
             "phone": self.phone,  # 手机号，可为空
             "create_at": self.create_at.isoformat() if self.create_at else None,  # 注册时间，格式化为字符串
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,  # 最后登录时间，格式化为字符串
@@ -169,13 +170,14 @@ class Article(db.Model):
             'tag': self.tag,
         }
 
-    def mng_to_dict(self):  # 字典，方便转为json
+    def mng_to_dict(self):                         #字典，方便转为json
         return {
             'id': self.id,
             'title': self.title,
             'content': self.content,
             'create_time': self.create_time.isoformat(),
             'author': self.user.username,
+            'user_id': self.user_id if self.user else 'Unknown',
             'permission': self.permission,  # 新增权限位
             'status': self.status,  # 新增状态位
             'image_path': self.image_path,  # 新增图片路径
