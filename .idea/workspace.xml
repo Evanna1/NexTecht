@@ -7,9 +7,8 @@
     <list default="true" id="80535f14-d954-470d-98f9-9bd1f2401f0d" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db.py" beforeDir="false" afterPath="$PROJECT_DIR$/db.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/artical.py" beforeDir="false" afterPath="$PROJECT_DIR$/server/artical.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server/follow.py" beforeDir="false" afterPath="$PROJECT_DIR$/server/follow.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/server/manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/server/manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/server/user.py" beforeDir="false" afterPath="$PROJECT_DIR$/server/user.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -18,6 +17,9 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://D:/program file/WeChat Files/wxid_py2gxtv50ja022/FileStorage/File/2025-05/manager(4).py" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3

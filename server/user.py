@@ -391,7 +391,7 @@ def get_profile():
         return jsonify({"state": 0, "message": "User is not allowed to access this data"}), 403
 
     user_info = {
-        "id": user.id,  # <--- ADD THIS LINE
+        "id": user.id,
         "username": user.username,
         "gender": user.gender,
         "intro": user.intro,

@@ -1,9 +1,14 @@
 from flask import Blueprint, request, jsonify
 from __init__ import db
-from db import User, Manager, Article,Follow, ArticleFavorite,Comment,Alike,UserBrowseRecord
+from db import User, Manager, Article,Follow, ArticleFavorite,Comment,Alike,UserBrowseRecord,CommentLike
 from datetime import datetime
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required
 from collections import OrderedDict
+
+def truncate_filter(s, max_length=10, end='...'):
+    if len(s) > max_length:
+        return s[:max_length] + end
+    return s
 
 # 管理员登录接口
 """输入：
@@ -371,8 +376,6 @@ def update_user_status():
     }
 
 """
-
-
 @manager_bp.route('/manager/update_user_permission', methods=['POST'])
 @jwt_required()
 def update_user_permission():
@@ -520,6 +523,8 @@ def get_user_comments(user_id):
                 "comment_status": comment.status,
                 "comment_like_count": comment.like_count,
                 "comment_reply_count": comment.reply_count,
+                "comment_is_approved": comment.is_approved,
+                'depth': comment.depth,
                 "user_info": target_user.to_dict()
             })
 
@@ -695,7 +700,7 @@ def get_article_comment_users(article_id):
         if user:
             comment_users.append({
                 "user_info": user.to_dict(),
-                "comment_content": comment.content,
+                "comment_content": truncate_filter(comment.content, max_length=10, end='...'),
                 "comment_create_time": comment.create_time.isoformat(),
                 "comment_update_time": comment.update_time.isoformat() if comment.update_time else None,
                 "comment_id": comment.id
@@ -850,7 +855,7 @@ def get_comment_content(comment_id):
     if not comment:
         return jsonify({"state": 0, "message": "评论不存在"}), 404
 
-    # 返回评论内容
+     # 返回评论内容
     return jsonify({
         "state": 1,
         "message": "获取评论内容成功",
@@ -858,44 +863,6 @@ def get_comment_content(comment_id):
         "author": comment.user.nickname,
         "create_time": comment.create_time,
         "update_time": comment.update_time
-    }), 200
-
-# 管理员审核评论
-@manager_bp.route('/manager/comment/<int:comment_id>/review', methods=['POST'])
-@jwt_required()
-def review_comment(comment_id):
-    # 验证管理员身份
-    current_mng_id = get_jwt_identity()
-    current_manager = Manager.query.get(current_mng_id)
-    if not current_manager:
-        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
-
-    # 检查目标评论是否存在
-    target_comment = Comment.query.get(comment_id)
-    if not target_comment:
-        return jsonify({"state": 0, "message": "目标评论不存在"}), 404
-
-    # 获取审核结果
-    data = request.get_json()
-    if not data or 'approved' not in data:
-        return jsonify({"state": 0, "message": "请求数据格式错误"}), 400
-
-    approved = data['approved']
-
-    # 更新评论的审核状态
-    if approved:
-        target_comment.is_approved = 1  # 审核通过
-    else:
-        target_comment.is_approved = 2  # 审核未通过
-
-    db.session.commit()
-
-    # 返回审核结果
-    return jsonify({
-        "state": 1,
-        "message": "评论审核成功",
-        "comment_id": target_comment.id,
-        "is_approved": target_comment.is_approved
     }), 200
 
 # 管理员修改评论状态（屏蔽/恢复评论）
@@ -964,8 +931,7 @@ def delete_comment(comment_id):
     return jsonify({
         "state": 1,
         "message": "评论删除成功",
-        "comment_id": target_comment.id,
-        "comment_content": target_comment.content  # 返回评论内容
+        "comment_id": target_comment.id
     }), 200
 
 # 管理员查看特定评论的回复列表
@@ -992,6 +958,7 @@ def get_comment_replies(comment_id):
         replies_list.append({
             "reply_id": reply.id,
             "content": reply.content,
+            "article_id": reply.article_id,
             "create_time": reply.create_time.isoformat(),
             "update_time": reply.update_time.isoformat() if reply.update_time else None,
             "status": reply.status,
@@ -1017,10 +984,10 @@ def get_comment_replies(comment_id):
         "replies": replies_list
     }), 200
 
-# 管理员查看特定评论的父评论
-@manager_bp.route('/manager/comment/<int:comment_id>/parent', methods=['GET'])
+# 管理员查看特定评论
+@manager_bp.route('/manager/comment/<int:comment_id>', methods=['GET'])
 @jwt_required()
-def get_comment_parent(comment_id):
+def get_commen(comment_id):
     # 验证管理员身份
     current_mng_id = get_jwt_identity()
     current_manager = Manager.query.get(current_mng_id)
@@ -1032,35 +999,52 @@ def get_comment_parent(comment_id):
     if not target_comment:
         return jsonify({"state": 0, "message": "目标评论不存在"}), 404
 
-    # 获取父评论
-    if target_comment.parent_id:
-        parent_comment = Comment.query.get(target_comment.parent_id)
-        if parent_comment:
-            parent_data = {
-                "parent_comment_id": parent_comment.id,
-                "content": parent_comment.content,
-                "create_time": parent_comment.create_time.isoformat(),
-                "update_time": parent_comment.update_time.isoformat() if parent_comment.update_time else None,
-                "status": parent_comment.status,
-                "like_count": parent_comment.like_count,
-                "reply_count": parent_comment.reply_count,
-                "depth": parent_comment.depth,
-                "user": {
-                    "id": parent_comment.user.id,
-                    "username": parent_comment.user.username,
-                    "nickname": parent_comment.user.nickname,
-                    "avatar": parent_comment.user.avatar
-                }
-            }
-        else:
-            return jsonify({"state": 0, "message": "父评论不存在"}), 404
-    else:
-        return jsonify({"state": 0, "message": "该评论没有父评论"}), 404
-
-    # 返回父评论信息
+    # 返回评论信息
     return jsonify({
         "state": 1,
-        "message": "父评论获取成功",
-        "parent_comment": parent_data
+        "message": "评论获取成功",
+        "target_comment": target_comment.to_dict()
+    }), 200
+
+# 管理员查看特定评论的点赞用户列表
+@manager_bp.route('/manager/comment/<int:comment_id>/likes', methods=['GET'])
+@jwt_required()
+def get_comment_likes(comment_id):
+    # 验证管理员身份
+    current_mng_id = get_jwt_identity()
+    current_manager = Manager.query.get(current_mng_id)
+    if not current_manager:
+        return jsonify({"state": 0, "message": "管理员身份验证失败"}), 401
+
+    # 检查目标评论是否存在
+    target_comment = Comment.query.get(comment_id)
+    if not target_comment:
+        return jsonify({"state": 0, "message": "目标评论不存在"}), 404
+
+    # 查找该评论的所有点赞记录
+    like_records = CommentLike.query.filter_by(comment_id=comment_id).all()
+
+    # 获取点赞用户的指定信息
+    like_users = []
+    for like in like_records:
+        user = User.query.get(like.user_id)
+        if user:
+            like_users.append({
+                "user_id": user.id,
+                "username": user.username,
+                "nickname": user.nickname,
+                "avatar": user.avatar,
+                "like_time": like.created_at.isoformat()
+            })
+
+    # 按点赞时间排序（从新到旧）
+    like_users.sort(key=lambda x: x["like_time"], reverse=True)
+
+    return jsonify({
+        "state": 1,
+        "message": f"评论 {comment_id} 的点赞用户列表",
+        "comment_content": target_comment.content,
+        "like_count": len(like_users),
+        "like_users": like_users
     }), 200
 
