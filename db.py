@@ -70,7 +70,7 @@ class User(db.Model):
         """加密用户的密码并存储到 password_hash 字段中"""
         self.password_hash = generate_password_hash(password)  # 使用 werkzeug 的 generate_password_hash 函数加密密码
 
-    def check_password(seljiamif, password):
+    def check_password(self, password):
         """验证输入的密码是否与存储的加密密码匹配"""
         return check_password_hash(self.password_hash, password)  # 使用 check_password_hash 校验密码
 
