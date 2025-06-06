@@ -38,7 +38,7 @@ class User(db.Model):
             "id": self.id,  # 用户ID，主键
             "username": self.username,  # 用户名，唯一
             "nickname": self.nickname,  # 昵称
-            "avatar": f"/static/{self.avatar}" if self.avatar else "' + profile.mng_avatar : '/mng_avatar.jpg'",
+            "avatar": self.avatar,
             "gender": self.gender,  # 性别
             "email": self.email,  # 邮箱，唯一
             "intro": self.intro,

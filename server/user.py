@@ -42,7 +42,7 @@ def register_user():
         current_dir = os.path.dirname(os.path.abspath(__file__))
 
         # 拼接出 blog/public/img 的绝对路径
-        save_path = os.path.abspath(os.path.join(current_dir, '..', '..', '..', 'blog', 'public', 'img'))
+        save_path = os.path.abspath(os.path.join(current_dir, '..', '..', '@latest', 'public', 'img'))
         os.makedirs(save_path, exist_ok=True)
 
         avatar_file.save(os.path.join(save_path, avatar_filename))
